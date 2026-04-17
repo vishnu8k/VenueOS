@@ -45,7 +45,16 @@ document.getElementById('btn-gen-plan').addEventListener('click', async () => {
         const data = await response.json();
         btn.innerText = "Plan Generated";
         document.getElementById('plan-output').style.display = "block";
-        document.getElementById('plan-text').innerHTML = `<b>Live Gemini Output:</b><br/>${data.summary || JSON.stringify(data)}`;
+        const summary = data.summary || '';
+        const blocked = (data.blockedRoads || []).map(r => `❌ ${r.roadName}: ${r.reason}`).join('<br>');
+        const open = (data.openRoads || []).map(r => `✅ ${r.roadName} → ${r.designatedGate}: ${r.instructions}`).join('<br>');
+        const staff = (data.staffPositions || []).map(r => `👮 ${r.location} (${r.role}) — ${r.count} staff`).join('<br>');
+        document.getElementById('plan-text').innerHTML = `
+            <b>📋 Summary:</b><br>${summary}<br><br>
+            <b>🚧 Blocked Roads:</b><br>${blocked || 'None'}<br><br>
+            <b>🛣️ Open Roads:</b><br>${open || 'None'}<br><br>
+            <b>👮 Staff Positions:</b><br>${staff || 'None'}
+        `.trim();
     } catch(err) {
         console.error("API failed, falling back to mock UI:", err);
         btn.innerHTML = `<span style="color:#ef4444;">API Err</span> - Faking...`;
