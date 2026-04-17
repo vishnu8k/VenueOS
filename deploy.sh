@@ -15,21 +15,6 @@ gcloud run deploy venueos-backend \
   --min-instances 1 \
   --memory 512Mi \
   --cpu 1 \
-  --set-env-vars GEMINI_API_KEY=$GEMINI_API_KEY,HMAC_SECRET=$HMAC_SECRET,STAFF_TOKEN_SECRET=$STAFF_TOKEN_SECRET
+  --set-env-vars FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID,GEMINI_API_KEY=$GEMINI_API_KEY,HMAC_SECRET=$HMAC_SECRET,STAFF_TOKEN_SECRET=$STAFF_TOKEN_SECRET
 
-# Set up Cloud Scheduler Job for density analysis
-echo "Creating Cloud Scheduler job..."
-CLOUD_FUNC_URL="https://asia-south1-$FIREBASE_PROJECT_ID.cloudfunctions.net/density_analysis"
-
-gcloud scheduler jobs create http density-analysis-scheduler \
-    --schedule="* * * * *" \
-    --uri=$CLOUD_FUNC_URL \
-    --location=asia-south1 \
-    --http-method=GET || \
-gcloud scheduler jobs update http density-analysis-scheduler \
-    --schedule="* * * * *" \
-    --uri=$CLOUD_FUNC_URL \
-    --location=asia-south1 \
-    --http-method=GET
-
-echo "Deployment complete!"
+echo "Deployment complete! Visit your Cloud Run URL to view the app."

@@ -35,7 +35,7 @@ async def debug_env():
     if gemini_key != "NOT_SET" and len(gemini_key) > 10:
         try:
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel(model_name="gemini-pro")
+            model = genai.GenerativeModel(model_name="gemini-1.5-flash")
             resp = await model.generate_content_async("Say OK")
             gemini_status = "working"
         except Exception as e:
