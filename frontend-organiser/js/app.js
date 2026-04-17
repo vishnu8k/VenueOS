@@ -25,9 +25,65 @@ window.switchSetupTab = function(tabId) {
 
 // Mock Login System
 document.getElementById('btn-google-login').addEventListener('click', () => {
-    // In actual implementation, triggering Firebase Auth here
     showView('view-events');
+    setTimeout(initMap, 100);
 });
+
+// ── Leaflet Map Setup ──────────────────────────────────────────────────────
+let venueMap = null;
+let planLayerGroup = null;
+const VENUE_LAT = 13.0627, VENUE_LNG = 80.2791;
+
+function initMap() {
+    if (venueMap) return;
+    venueMap = L.map('leaflet-map').setView([VENUE_LAT, VENUE_LNG], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 19
+    }).addTo(venueMap);
+    L.marker([VENUE_LAT, VENUE_LNG]).addTo(venueMap)
+        .bindPopup('<b>🏟️ MA Chidambaram Stadium</b><br>CSK vs MI 2026').openPopup();
+    planLayerGroup = L.layerGroup().addTo(venueMap);
+}
+
+const ROAD_COORDS = {
+    'Wallajah Road':    [[13.0590, 80.2760], [13.0627, 80.2791]],
+    'Bells Road':       [[13.0627, 80.2791], [13.0610, 80.2830]],
+    'Triplicane Road':  [[13.0627, 80.2791], [13.0660, 80.2770]],
+    'North Gate':       [[13.0655, 80.2780], [13.0670, 80.2800]],
+    'South Gate':       [[13.0600, 80.2800], [13.0590, 80.2820]],
+};
+
+function getRoadCoords(roadName) {
+    for (const key of Object.keys(ROAD_COORDS)) {
+        if (roadName && roadName.toLowerCase().includes(key.toLowerCase())) return ROAD_COORDS[key];
+    }
+    const o = () => (Math.random() - 0.5) * 0.012;
+    return [[VENUE_LAT + o(), VENUE_LNG + o()], [VENUE_LAT + o(), VENUE_LNG + o()]];
+}
+
+function renderPlanOnMap(data) {
+    if (!venueMap) return;
+    planLayerGroup.clearLayers();
+    (data.blockedRoads || []).forEach(r => {
+        L.polyline(getRoadCoords(r.roadName), { color: '#ef4444', weight: 6, opacity: 0.9 })
+            .addTo(planLayerGroup).bindPopup(`<b>🚧 BLOCKED: ${r.roadName}</b><br>${r.reason}`);
+    });
+    (data.openRoads || []).forEach(r => {
+        L.polyline(getRoadCoords(r.roadName), { color: '#22c55e', weight: 5, opacity: 0.9, dashArray: '8,4' })
+            .addTo(planLayerGroup).bindPopup(`<b>✅ OPEN: ${r.roadName}</b><br>→ ${r.designatedGate}<br>${r.instructions}`);
+    });
+    (data.staffPositions || []).forEach((r, i) => {
+        const icon = L.divIcon({
+            html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)">👮</div>`,
+            iconSize: [30, 30], iconAnchor: [15, 15]
+        });
+        const off = i * 0.0008;
+        L.marker([VENUE_LAT - 0.002 + off, VENUE_LNG - 0.002 + off], { icon })
+            .addTo(planLayerGroup).bindPopup(`<b>${r.location}</b><br>${r.role} — ${r.count} staff`);
+    });
+    try { venueMap.fitBounds(planLayerGroup.getBounds().pad(0.2)); } catch(e) {}
+}
+
 
 // Gemini Logic for Generation with Circuit Breaker Fallback
 document.getElementById('btn-gen-plan').addEventListener('click', async () => {
@@ -55,6 +111,7 @@ document.getElementById('btn-gen-plan').addEventListener('click', async () => {
             <b>🛣️ Open Roads:</b><br>${open || 'None'}<br><br>
             <b>👮 Staff Positions:</b><br>${staff || 'None'}
         `.trim();
+        renderPlanOnMap(data);
     } catch(err) {
         console.error("API failed, falling back to mock UI:", err);
         btn.innerHTML = `<span style="color:#ef4444;">API Err</span> - Faking...`;
