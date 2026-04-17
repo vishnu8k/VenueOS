@@ -1,11 +1,10 @@
 #!/bin/bash
 set -e
 
-echo "Building Docker container..."
-docker build -f backend/Dockerfile -t gcr.io/$FIREBASE_PROJECT_ID/venueos-backend .
-
-echo "Pushing to GCR..."
-docker push gcr.io/$FIREBASE_PROJECT_ID/venueos-backend
+echo "Building and Pushing Docker container remotely (No local Docker needed!)..."
+mv backend/Dockerfile Dockerfile
+gcloud builds submit --tag gcr.io/$FIREBASE_PROJECT_ID/venueos-backend .
+mv Dockerfile backend/Dockerfile
 
 echo "Deploying to Cloud Run..."
 gcloud run deploy venueos-backend \

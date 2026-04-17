@@ -36,7 +36,7 @@ document.getElementById('btn-gen-plan').addEventListener('click', async () => {
     const crowdSize = document.getElementById('input-crowd-size').value || 50000;
     
     try {
-        const response = await fetch('/api/v1/organiser/csk-vs-mi-demo/road-plan', {
+        const response = await fetch('/api/v1/organiser/events/csk-vs-mi-demo/generate-road-plan', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ expectedCrowdSize: parseInt(crowdSize) })
@@ -62,7 +62,7 @@ document.getElementById('btn-gen-batches').addEventListener('click', async () =>
     btn.innerText = "Generating via API...";
     
     try {
-        const response = await fetch('/api/v1/organiser/csk-vs-mi-demo/batches', {
+        const response = await fetch('/api/v1/organiser/events/csk-vs-mi-demo/generate-batches', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'}
         });
