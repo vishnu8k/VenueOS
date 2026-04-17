@@ -45,7 +45,7 @@ document.getElementById('btn-gen-plan').addEventListener('click', async () => {
         const data = await response.json();
         btn.innerText = "Plan Generated";
         document.getElementById('plan-output').style.display = "block";
-        document.getElementById('plan-text').innerHTML = `<b>Live Gemini Output:</b><br/>${data.geminiPlan}`;
+        document.getElementById('plan-text').innerHTML = `<b>Live Gemini Output:</b><br/>${data.summary || JSON.stringify(data)}`;
     } catch(err) {
         console.error("API failed, falling back to mock UI:", err);
         btn.innerHTML = `<span style="color:#ef4444;">API Err</span> - Faking...`;
@@ -74,7 +74,7 @@ document.getElementById('btn-gen-batches').addEventListener('click', async () =>
         const tbody = document.getElementById('batch-table-body');
         tbody.innerHTML = '';
         data.batches.forEach(b => {
-            tbody.innerHTML += `<tr><td>${b.batchCode}</td><td>${b.assignedGate}</td><td>${b.assignedZone}</td><td>${b.entryWindowStr}</td><td><span class="badge grey-badge">Pending</span></td><td><button class="btn-small">Dispatch</button></td></tr>`;
+            tbody.innerHTML += `<tr><td>${b.batchCode || 'BXX'}</td><td>${b.gateId || b.assignedGate || 'TBD'}</td><td>${b.gatheringZoneId || b.assignedZone || 'TBD'}</td><td>${b.entryWindowStart || b.entryWindowStr || 'TBD'}</td><td><span class="badge grey-badge">Pending</span></td><td><button class="btn-small">Dispatch</button></td></tr>`;
         });
     } catch(err) {
         console.error("API failed, falling back to mock UI:", err);

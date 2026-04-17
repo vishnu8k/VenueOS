@@ -37,7 +37,8 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
     try:
         model = get_model(system_instruction)
         response = await model.generate_content_async(user_prompt)
-        return json.loads(response.text)
+        text = response.text.replace('```json', '').replace('```', '').strip()
+        return json.loads(text)
     except Exception as e:
         print(f"Gemini API error in generate_road_plan: {e}")
         return {}
