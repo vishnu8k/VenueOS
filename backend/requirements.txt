@@ -1,0 +1,8 @@
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+firebase-admin==6.4.0
+google-generativeai==0.4.0
+pydantic==2.6.1
+python-dotenv==1.0.1
+qrcode==7.4.2
+pyjwt==2.8.0

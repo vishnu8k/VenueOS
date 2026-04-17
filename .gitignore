@@ -1,0 +1,29 @@
+# Environments
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Google Cloud & Credentials - CRITICAL SECURITY
+service-account.json
+service_account.json
+Creds.docx
+~$Creds.docx
+*.pem
+*.json.key
+
+# System
+.DS_Store
+Thumbs.db

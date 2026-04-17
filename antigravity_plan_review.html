@@ -1,0 +1,282 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;font-size:14px;color:var(--color-text-primary);background:transparent;padding:0 0 40px}
+
+.hero{padding:28px 36px 20px;border-bottom:1px solid var(--color-border-tertiary)}
+.hero h1{font-family:'DM Serif Display',serif;font-size:24px;margin-bottom:4px}
+.hero p{font-size:13px;color:var(--color-text-secondary)}
+
+.section{padding:20px 36px;border-bottom:1px solid var(--color-border-tertiary)}
+.section:last-child{border-bottom:none}
+.section-label{font-size:10px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-text-tertiary);margin-bottom:12px}
+
+.score-row{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+.score-box{border:1px solid var(--color-border-secondary);border-radius:10px;padding:14px 20px;flex:1;background:var(--color-background-secondary)}
+.score-box .num{font-family:'DM Serif Display',serif;font-size:32px;line-height:1}
+.score-box .lbl{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.green{color:#3b6d11}.amber{color:#854F0B}.red{color:#a32d2d}.blue{color:#185FA5}
+
+.verdict-bar{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:10px;margin-bottom:10px;border:1px solid var(--color-border-tertiary)}
+.verdict-bar.good{background:rgba(99,153,34,0.06);border-color:rgba(99,153,34,0.2)}
+.verdict-bar.warn{background:rgba(186,117,23,0.06);border-color:rgba(186,117,23,0.2)}
+.verdict-bar.bad{background:rgba(163,45,45,0.06);border-color:rgba(163,45,45,0.2)}
+.verdict-bar.info{background:rgba(24,95,165,0.06);border-color:rgba(24,95,165,0.2)}
+.vb-icon{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.vb-icon.good-i{background:rgba(99,153,34,0.15);color:#3b6d11}
+.vb-icon.warn-i{background:rgba(186,117,23,0.15);color:#854F0B}
+.vb-icon.bad-i{background:rgba(163,45,45,0.15);color:#a32d2d}
+.vb-icon.info-i{background:rgba(24,95,165,0.15);color:#185FA5}
+.vb-body{}
+.vb-title{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px}
+.vb-desc{font-size:12px;color:var(--color-text-secondary);line-height:1.6}
+.vb-tag{display:inline-block;font-size:10px;font-weight:500;padding:1px 7px;border-radius:8px;margin-left:6px;vertical-align:middle}
+.tag-spec{background:rgba(24,95,165,0.1);color:#185FA5}
+.tag-miss{background:rgba(163,45,45,0.1);color:#a32d2d}
+.tag-good{background:rgba(99,153,34,0.1);color:#3b6d11}
+.tag-warn{background:rgba(186,117,23,0.1);color:#854F0B}
+
+.phase-table{width:100%;border-collapse:collapse;margin-top:8px}
+.phase-table th{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;color:var(--color-text-tertiary);text-align:left;padding:8px 10px;border-bottom:1px solid var(--color-border-secondary)}
+.phase-table td{font-size:12px;color:var(--color-text-secondary);padding:9px 10px;border-bottom:1px solid var(--color-border-tertiary);vertical-align:top}
+.phase-table tr:last-child td{border-bottom:none}
+.phase-table td:first-child{font-weight:500;color:var(--color-text-primary);width:22%}
+.phase-table td:nth-child(2){width:15%}
+
+.pill{display:inline-block;font-size:10px;font-weight:500;padding:2px 8px;border-radius:10px}
+.pill-green{background:rgba(99,153,34,0.12);color:#3b6d11}
+.pill-amber{background:rgba(186,117,23,0.12);color:#854F0B}
+.pill-red{background:rgba(163,45,45,0.12);color:#a32d2d}
+.pill-blue{background:rgba(24,95,165,0.12);color:#185FA5}
+.pill-gray{background:var(--color-background-secondary);color:var(--color-text-secondary);border:1px solid var(--color-border-secondary)}
+
+.action-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.action-item{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:8px;border:1px solid var(--color-border-tertiary);background:var(--color-background-secondary)}
+.action-num{font-family:'DM Serif Display',serif;font-size:20px;color:var(--color-border-secondary);min-width:24px;line-height:1.1}
+.action-body .action-title{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px}
+.action-body .action-desc{font-size:12px;color:var(--color-text-secondary);line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Antigravity Implementation Plan — Review Report</h1>
+  <p>Cross-checked against VenueOS Spec v1.0 &nbsp;·&nbsp; April 17, 2026</p>
+</div>
+
+<!-- OVERALL SCORE -->
+<div class="section">
+  <div class="section-label">Overall assessment</div>
+  <div class="score-row">
+    <div class="score-box"><div class="num amber">72<span style="font-size:18px">%</span></div><div class="lbl">Spec coverage</div></div>
+    <div class="score-box"><div class="num green">9 / 9</div><div class="lbl">Phases planned</div></div>
+    <div class="score-box"><div class="num red">6</div><div class="lbl">Missing items</div></div>
+    <div class="score-box"><div class="num amber">3</div><div class="lbl">Errors / typos</div></div>
+    <div class="score-box"><div class="num blue">2</div><div class="lbl">Good additions</div></div>
+  </div>
+  <div class="verdict-bar good">
+    <div class="vb-icon good-i">✓</div>
+    <div class="vb-body"><div class="vb-title">Overall: solid start, safe to proceed</div><div class="vb-desc">All 9 phases are accounted for. File structure matches the spec. Phase sequencing is correct. The plan is buildable as-is for the backend and cloud functions. Frontend and QR sections need corrections before building.</div></div>
+  </div>
+</div>
+
+<!-- ERRORS -->
+<div class="section">
+  <div class="section-label">Errors that must be fixed before building</div>
+
+  <div class="verdict-bar bad">
+    <div class="vb-icon bad-i">✗</div>
+    <div class="vb-body">
+      <div class="vb-title">Phase 4 typo — "HMRC-SHA256" should be "HMAC-SHA256" <span class="vb-tag tag-miss">Error</span></div>
+      <div class="vb-desc">The plan description for qr.py says "HMRC-SHA256 signing". HMRC is the UK tax authority. The correct algorithm is HMAC-SHA256 as specified in Section 3.6. If this wording is passed to Antigravity as a prompt, it may generate incorrect or hallucinated code. Fix this before Phase 4 prompt.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar bad">
+    <div class="vb-icon bad-i">✗</div>
+    <div class="vb-body">
+      <div class="vb-title">QR checkpoint stage order is incomplete <span class="vb-tag tag-miss">Error</span></div>
+      <div class="vb-desc">The plan lists the QR stage flow as: "Slot Booked → Boarded → Perimeter → Inside → Exited" — missing the "Gate Entered" stage. The spec (FR-E3) defines 6 stages: Slot Booked → Transport Boarded → Perimeter Cleared → Gate Entered → Inside Venue → Exited. Gate Entered and Inside are two separate checkpoints. If qr.py is built with 5 stages, the gate entry scan will have no stage to write to and the validator will break.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar bad">
+    <div class="vb-icon bad-i">✗</div>
+    <div class="vb-body">
+      <div class="vb-title">Frontend CSS mentions "glassmorphism" — conflicts with mobile performance requirement <span class="vb-tag tag-warn">Risk</span></div>
+      <div class="vb-desc">The plan proposes "glassmorphism elements" for the organiser dashboard CSS. Glassmorphism uses backdrop-filter: blur(), which is GPU-intensive and can cause significant lag on budget Android phones that attendees will use on event day. It is fine on the desktop organiser dashboard but must not be used in frontend-attendee/css/style.css. Explicitly instruct Antigravity to use flat, performant CSS for the attendee app only.</div>
+    </div>
+  </div>
+</div>
+
+<!-- MISSING ITEMS -->
+<div class="section">
+  <div class="section-label">Items from the spec missing from the plan</div>
+
+  <div class="verdict-bar warn">
+    <div class="vb-icon warn-i">!</div>
+    <div class="vb-body">
+      <div class="vb-title">No mention of Cloud Scheduler setup for density analysis <span class="vb-tag tag-miss">Missing</span></div>
+      <div class="vb-desc">The spec (Section 3.1 and 4.4) requires Cloud Scheduler to trigger the density_analysis Cloud Function every 60 seconds during the event window. The plan lists functions/main.py as an HTTP-triggered function but does not include the Cloud Scheduler job creation in deploy.sh or any setup instructions. Without this, the density heatmap never auto-updates — a judge will see a static map.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar warn">
+    <div class="vb-icon warn-i">!</div>
+    <div class="vb-body">
+      <div class="vb-title">Firestore TTL policy for gps_pings not mentioned <span class="vb-tag tag-miss">Missing</span></div>
+      <div class="vb-desc">The spec (Section 3.3) requires a Firestore TTL policy on the gps_pings collection using the expireAt field, so old pings auto-delete after 4 hours. The plan lists firestore.indexes.json and firestore.rules but does not mention TTL setup. Without this, the gps_pings collection will grow unboundedly during the event and slow down density queries.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar warn">
+    <div class="vb-icon warn-i">!</div>
+    <div class="vb-body">
+      <div class="vb-title">Staff scanner token generation (FR-H3) not in any phase <span class="vb-tag tag-miss">Missing</span></div>
+      <div class="vb-desc">The spec defines a staff scanner access system: organisers generate short-lived JWT tokens from the dashboard, and staff access /scanner?token=[staff_token] without a full account. The plan lists scanner.py as a router but does not include the token generation endpoint in organiser.py or the token verification middleware. Without this, the scanner has no access control — anyone with the URL can scan.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar warn">
+    <div class="vb-icon warn-i">!</div>
+    <div class="vb-body">
+      <div class="vb-title">Firestore seeding / demo data not planned <span class="vb-tag tag-miss">Missing</span></div>
+      <div class="vb-desc">The spec (Section 8.2) specifies exactly what needs to be pre-seeded in Firestore for the demo: one event (CSK vs MI), 8 gates, 4 gathering zones, 20+ amenities, 200+ batches, 3-5 test attendees, simulated density snapshots, and one pre-classified incident report. The plan has no seed script or data setup phase. With only 3 days left, this needs to be scheduled — without seeded data there is nothing to demo.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar warn">
+    <div class="vb-icon warn-i">!</div>
+    <div class="vb-body">
+      <div class="vb-title">generate_qr_on_booking Cloud Function not in Phase 8 <span class="vb-tag tag-miss">Missing</span></div>
+      <div class="vb-desc">The spec defines two Cloud Functions: density_analysis (included) and generate_qr_on_booking (not mentioned). The generate_qr_on_booking function triggers on a Firestore write when an attendee's checkpointStage becomes 'booked' and writes the QR payload back to the attendee document. Without it, the QR pass is never generated after slot booking — the most important attendee flow breaks completely.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar warn">
+    <div class="vb-icon warn-i">!</div>
+    <div class="vb-body">
+      <div class="vb-title">Offline resilience for QR scanner not planned <span class="vb-tag tag-miss">Missing</span></div>
+      <div class="vb-desc">The spec (Screen O6) requires the scanner to cache the last 100 validated QR payloads locally and queue scan events when offline, syncing when reconnected. Stadium network is unreliable with 50,000 people. The plan makes no mention of this. It is acceptable to defer this for the hackathon, but Antigravity should be explicitly told to add localStorage caching of HMAC-validated payloads in the scanner JS.</div>
+    </div>
+  </div>
+</div>
+
+<!-- WHAT IS GOOD -->
+<div class="section">
+  <div class="section-label">What Antigravity got right</div>
+
+  <div class="verdict-bar good">
+    <div class="vb-icon good-i">✓</div>
+    <div class="vb-body">
+      <div class="vb-title">Open Questions section is genuinely useful <span class="vb-tag tag-good">Good addition</span></div>
+      <div class="vb-desc">Antigravity correctly identified that Firebase and GCP setup must happen before the backend is runnable, and proactively asked whether to use stubbed implementations or real credentials. This is the right question at the right time. Answer: proceed with real credentials from a GCP project. Set up Firebase now if not done — it takes 20 minutes.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar good">
+    <div class="vb-icon good-i">✓</div>
+    <div class="vb-body">
+      <div class="vb-title">pyjwt added to requirements — correct inference <span class="vb-tag tag-good">Good addition</span></div>
+      <div class="vb-desc">The spec mentioned JWT tokens for staff scanner access but did not explicitly list pyjwt in the tech stack. Antigravity correctly inferred that JWT signing requires pyjwt and added it to requirements.txt. This is the right call.</div>
+    </div>
+  </div>
+
+  <div class="verdict-bar good">
+    <div class="vb-icon good-i">✓</div>
+    <div class="vb-body">
+      <div class="vb-title">Phase sequence and file structure match the spec exactly</div>
+      <div class="vb-desc">All 9 phases are in the correct build order (scaffold → Firebase → Gemini → QR → routes → organiser UI → attendee UI → functions → deploy). All file paths match Section 3.2 of the spec. The plan is safe to execute in this sequence.</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE BY PHASE -->
+<div class="section">
+  <div class="section-label">Phase-by-phase status</div>
+  <table class="phase-table">
+    <thead><tr><th>Phase</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Phase 1 — Scaffold</td><td><span class="pill pill-green">Ready</span></td><td>Correct. Proceed as planned.</td></tr>
+      <tr><td>Phase 2 — Firebase</td><td><span class="pill pill-green">Ready</span></td><td>Correct. Ensure TTL policy instruction is added to the prompt for gps_pings.</td></tr>
+      <tr><td>Phase 3 — Gemini</td><td><span class="pill pill-green">Ready</span></td><td>Correct. Four prompts accounted for and match spec Section 3.5.</td></tr>
+      <tr><td>Phase 4 — QR</td><td><span class="pill pill-red">Fix first</span></td><td>Fix "HMRC" typo → "HMAC". Add the missing "Gate Entered" checkpoint stage to your prompt before building.</td></tr>
+      <tr><td>Phase 5 — Routes</td><td><span class="pill pill-amber">Partial</span></td><td>Add staff token generation endpoint to organiser.py prompt. Add token verification middleware instruction.</td></tr>
+      <tr><td>Phase 6 — Organiser UI</td><td><span class="pill pill-green">Ready</span></td><td>Glassmorphism fine here (desktop). Confirm all 6 screens (O1–O6) are in the prompt.</td></tr>
+      <tr><td>Phase 7 — Attendee UI</td><td><span class="pill pill-amber">Partial</span></td><td>Explicitly ban glassmorphism in the attendee app prompt. Add offline scanner caching instruction.</td></tr>
+      <tr><td>Phase 8 — Functions</td><td><span class="pill pill-red">Fix first</span></td><td>Add generate_qr_on_booking function. Add Cloud Scheduler job creation to deploy.sh prompt.</td></tr>
+      <tr><td>Phase 9 — Deploy</td><td><span class="pill pill-amber">Partial</span></td><td>Add Firestore TTL policy setup. Add seed data script (Section 8.2) as a separate seed.py file.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ANSWER ANTIGRAVITY'S QUESTIONS -->
+<div class="section">
+  <div class="section-label">How to answer Antigravity's open questions</div>
+
+  <div class="action-list">
+    <div class="action-item">
+      <div class="action-num">Q1</div>
+      <div class="action-body">
+        <div class="action-title">"Should I use stubs or real Firebase credentials?"</div>
+        <div class="action-desc">Tell Antigravity: "Proceed with real Firebase credentials. I will provide a .env.local file with all secrets before running. Build the backend assuming the credentials are valid — do not add stubs or mock implementations." Then set up your GCP project now if you haven't. Firebase project creation + Firestore + Auth setup takes about 20 minutes. Do this in parallel while Antigravity builds Phase 1.</div>
+      </div>
+    </div>
+    <div class="action-item">
+      <div class="action-num">Q2</div>
+      <div class="action-body">
+        <div class="action-title">"Is a GCP project ready to link?"</div>
+        <div class="action-desc">If yes: give Antigravity the project ID now so it can hardcode it where needed. If no: create one immediately at console.cloud.google.com. Enable: Firestore API, Firebase Auth, Cloud Run API, Cloud Build API, Maps JavaScript API, Directions API, Cloud Storage, Cloud Functions, Cloud Scheduler. This is a one-time 15-minute setup that unblocks everything.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WHAT TO DO NEXT -->
+<div class="section">
+  <div class="section-label">Your next actions before continuing in Antigravity</div>
+  <div class="action-list">
+    <div class="action-item">
+      <div class="action-num">1</div>
+      <div class="action-body">
+        <div class="action-title">Fix the HMAC typo and missing Gate Entered stage in qr.py description</div>
+        <div class="action-desc">Before running Phase 4, tell Antigravity: "In qr.py, use HMAC-SHA256 (not HMRC). The checkpoint stage order has 6 stages: booked → boarded → perimeter_cleared → gate_entered → inside → exited. Validate stages in this exact order."</div>
+      </div>
+    </div>
+    <div class="action-item">
+      <div class="action-num">2</div>
+      <div class="action-body">
+        <div class="action-title">Add generate_qr_on_booking to Phase 8 prompt</div>
+        <div class="action-desc">Before running Phase 8, add to your prompt: "Also create a second Cloud Function called generate_qr_on_booking that triggers on Firestore document write to the attendees collection when checkpointStage equals 'booked'. It calls qr_service.generate_qr_payload and writes the result back to the attendee document's qrPayload field."</div>
+      </div>
+    </div>
+    <div class="action-item">
+      <div class="action-num">3</div>
+      <div class="action-body">
+        <div class="action-title">Add Cloud Scheduler to Phase 9 / deploy.sh</div>
+        <div class="action-desc">Add to your Phase 9 prompt: "In deploy.sh, after deploying Cloud Functions, create a Cloud Scheduler job named 'density-analysis-scheduler' that calls the density_analysis function URL every 60 seconds. Use: gcloud scheduler jobs create http density-analysis-scheduler --schedule='* * * * *' --uri=[FUNCTION_URL] --location=asia-south1"</div>
+      </div>
+    </div>
+    <div class="action-item">
+      <div class="action-num">4</div>
+      <div class="action-body">
+        <div class="action-title">Add a seed.py script to Phase 9</div>
+        <div class="action-desc">Add to your Phase 9 prompt: "Create a seed.py script in the root directory that populates Firestore with demo data for the CSK vs MI event as described in Section 8.2 of the spec: 1 event, 8 gates, 4 gathering zones, 20 amenities, 200 batches, 5 test attendees with QR passes, 3 simulated density snapshots, and 1 pre-classified incident report."</div>
+      </div>
+    </div>
+    <div class="action-item">
+      <div class="action-num">5</div>
+      <div class="action-body">
+        <div class="action-title">Set up GCP + Firebase now, in parallel</div>
+        <div class="action-desc">Do not wait for Antigravity to finish Phase 1 before starting GCP setup. Create the Firebase project, enable Firestore in Native mode, enable Phone OTP and Google Sign-In in Firebase Auth, enable Maps JavaScript API + Directions API, create a Cloud Storage bucket, and generate a service account key. Fill in your .env.local while Antigravity builds phases 1–3.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
