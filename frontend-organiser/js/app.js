@@ -45,34 +45,41 @@ function initMap() {
     planLayerGroup = L.layerGroup().addTo(venueMap);
 }
 
-// Bounding box tightly around MA Chidambaram Stadium area (~3km radius)
-const BBOX = '13.040,80.255,13.085,80.310'; // south,west,north,east
-
 // Fetch actual road geometry from OpenStreetMap Overpass API
+// Uses `around:1500` so it only fetches the segment physically near the stadium
 async function fetchRoadGeometry(roadName) {
-    // Sanitize the name for Overpass regex
-    const safeName = roadName.replace(/['"\\]/g, '');
-    const query = `[out:json][timeout:8];
-way["name"~"${safeName}",i](${BBOX});
+    const safeName = roadName.replace(/['"\\]/g, '').trim();
+    // Query only within 1.5km of the stadium to guarantee correct local segment
+    const query = `[out:json][timeout:12];
+way["name"~"${safeName}",i](around:1500,${VENUE_LAT},${VENUE_LNG});
 out geom;`;
     try {
         const res = await fetch('https://overpass-api.de/api/interpreter', {
             method: 'POST',
-            body: query,
-            headers: { 'Content-Type': 'text/plain' }
+            body: query
         });
+        if (!res.ok) return null;
         const json = await res.json();
         if (json.elements && json.elements.length > 0) {
-            // Use the first matching way's geometry
-            const geom = json.elements[0].geometry;
-            if (geom && geom.length >= 2) {
-                return geom.map(pt => [pt.lat, pt.lon]);
+            // Pick the way element whose centroid is closest to stadium
+            let best = null, bestDist = Infinity;
+            for (const el of json.elements) {
+                if (!el.geometry || el.geometry.length < 2) continue;
+                const midPt = el.geometry[Math.floor(el.geometry.length / 2)];
+                const d = Math.hypot(midPt.lat - VENUE_LAT, midPt.lon - VENUE_LNG);
+                if (d < bestDist) { bestDist = d; best = el; }
+            }
+            if (best) {
+                const pts = best.geometry.map(pt => [pt.lat, pt.lon]);
+                console.log(`OSM ✅ "${roadName}" → ${pts.length} nodes, dist=${bestDist.toFixed(4)}`);
+                return pts;
             }
         }
+        console.warn(`OSM ⚠️ No ways found near stadium for "${roadName}"`);
     } catch (e) {
-        console.warn(`Overpass lookup failed for "${roadName}":`, e);
+        console.warn(`Overpass FAILED for "${roadName}":`, e);
     }
-    return null; // Caller handles fallback
+    return null;
 }
 
 async function renderPlanOnMap(data) {
