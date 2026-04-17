@@ -50,6 +50,19 @@ async def debug_env():
         "FIREBASE_PROJECT_ID": os.getenv("FIREBASE_PROJECT_ID", "NOT_SET"),
     }
 
+@app.get("/debug/models")
+async def list_models():
+    import google.generativeai as genai
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    if not gemini_key:
+        return {"error": "GEMINI_API_KEY not set"}
+    try:
+        genai.configure(api_key=gemini_key)
+        models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        return {"available_models": models}
+    except Exception as e:
+        return {"error": str(e)}
+
 from backend.routers.organiser import organiser_router
 from backend.routers.attendee import attendee_router
 from backend.routers.scanner import scanner_router
