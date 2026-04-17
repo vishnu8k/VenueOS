@@ -47,9 +47,12 @@ async def build_road_plan(eventId: str, expectedCrowdSize: int = Body(default=50
     evt = get_event(eventId)
     if not evt: evt = {"id": eventId, "name": "Hackathon Demo Event"} # Mock if seed wasn't run
     plan = await generate_road_plan(evt, {})
-    # Safety wrapper
+    # Safety wrapper to prevent 500 crashes if Firestore is unseeded
     if plan and "geminiPlan" in plan:
-        update_event(eventId, {"roadPlan": plan})
+        try:
+            update_event(eventId, {"roadPlan": plan})
+        except Exception:
+            pass
     return plan
 
 @organiser_router.post("/events/{eventId}/generate-batches")
@@ -60,7 +63,10 @@ async def build_batches(eventId: str, expectedCrowdSize: int = Body(default=5000
     plan = await generate_batch_schedule(evt, expectedCrowdSize, 1000)
     
     if plan and "batches" in plan:
-        update_event(eventId, {"batchSchedule": plan.get("batches", [])})
+        try:
+            update_event(eventId, {"batchSchedule": plan.get("batches", [])})
+        except Exception:
+            pass
     return plan
 
 @organiser_router.put("/events/{eventId}/publish-schedule")
