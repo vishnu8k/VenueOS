@@ -42,7 +42,7 @@ def update_amenities(eventId: str, amenities: List[Dict[str, Any]] = Body(...), 
     return {"message": "Amenities updated"}
 
 @organiser_router.post("/events/{eventId}/generate-road-plan")
-async def build_road_plan(eventId: str, expectedCrowdSize: int = Body(default=50000)):
+async def build_road_plan(eventId: str, payload: dict = Body(default={})):    
     # Bypassing strict Token Auth for live Demo click!
     evt = get_event(eventId)
     if not evt: evt = {"id": eventId, "name": "Hackathon Demo Event"} # Mock if seed wasn't run
@@ -56,8 +56,9 @@ async def build_road_plan(eventId: str, expectedCrowdSize: int = Body(default=50
     return plan
 
 @organiser_router.post("/events/{eventId}/generate-batches")
-async def build_batches(eventId: str, expectedCrowdSize: int = Body(default=50000)):
+async def build_batches(eventId: str, payload: dict = Body(default={})):    
     # Bypassing strict Token Auth for live Demo click!
+    expectedCrowdSize = payload.get("expectedCrowdSize", 50000) if isinstance(payload, dict) else 50000
     evt = get_event(eventId)
     if not evt: evt = {"id": eventId, "name": "Hackathon Demo Event"}
     plan = await generate_batch_schedule(evt, expectedCrowdSize, 1000)
