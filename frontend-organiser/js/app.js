@@ -45,43 +45,88 @@ function initMap() {
     planLayerGroup = L.layerGroup().addTo(venueMap);
 }
 
-const ROAD_COORDS = {
-    'Wallajah Road':    [[13.0590, 80.2760], [13.0627, 80.2791]],
-    'Bells Road':       [[13.0627, 80.2791], [13.0610, 80.2830]],
-    'Triplicane Road':  [[13.0627, 80.2791], [13.0660, 80.2770]],
-    'North Gate':       [[13.0655, 80.2780], [13.0670, 80.2800]],
-    'South Gate':       [[13.0600, 80.2800], [13.0590, 80.2820]],
-};
+// Bounding box tightly around MA Chidambaram Stadium area (~3km radius)
+const BBOX = '13.040,80.255,13.085,80.310'; // south,west,north,east
 
-function getRoadCoords(roadName) {
-    for (const key of Object.keys(ROAD_COORDS)) {
-        if (roadName && roadName.toLowerCase().includes(key.toLowerCase())) return ROAD_COORDS[key];
+// Fetch actual road geometry from OpenStreetMap Overpass API
+async function fetchRoadGeometry(roadName) {
+    // Sanitize the name for Overpass regex
+    const safeName = roadName.replace(/['"\\]/g, '');
+    const query = `[out:json][timeout:8];
+way["name"~"${safeName}",i](${BBOX});
+out geom;`;
+    try {
+        const res = await fetch('https://overpass-api.de/api/interpreter', {
+            method: 'POST',
+            body: query,
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const json = await res.json();
+        if (json.elements && json.elements.length > 0) {
+            // Use the first matching way's geometry
+            const geom = json.elements[0].geometry;
+            if (geom && geom.length >= 2) {
+                return geom.map(pt => [pt.lat, pt.lon]);
+            }
+        }
+    } catch (e) {
+        console.warn(`Overpass lookup failed for "${roadName}":`, e);
     }
-    const o = () => (Math.random() - 0.5) * 0.012;
-    return [[VENUE_LAT + o(), VENUE_LNG + o()], [VENUE_LAT + o(), VENUE_LNG + o()]];
+    return null; // Caller handles fallback
 }
 
-function renderPlanOnMap(data) {
+async function renderPlanOnMap(data) {
     if (!venueMap) return;
     planLayerGroup.clearLayers();
-    (data.blockedRoads || []).forEach(r => {
-        L.polyline(getRoadCoords(r.roadName), { color: '#ef4444', weight: 6, opacity: 0.9 })
-            .addTo(planLayerGroup).bindPopup(`<b>🚧 BLOCKED: ${r.roadName}</b><br>${r.reason}`);
+
+    const allRoads = [
+        ...(data.blockedRoads || []).map(r => ({ ...r, type: 'blocked' })),
+        ...(data.openRoads || []).map(r => ({ ...r, type: 'open' })),
+    ];
+
+    // Fetch all road geometries in parallel
+    const geometries = await Promise.all(allRoads.map(r => fetchRoadGeometry(r.roadName)));
+
+    allRoads.forEach((r, i) => {
+        // Use OSM geometry if found, else fall back to Gemini coords, else fallback line
+        let coords = geometries[i];
+        if (!coords || coords.length < 2) {
+            coords = (r.coords && r.coords.length >= 2) ? r.coords : null;
+        }
+        if (!coords) {
+            // Last resort: tiny offset from stadium
+            const o = (i + 1) * 0.002;
+            coords = [[VENUE_LAT + o, VENUE_LNG + o], [VENUE_LAT + o * 1.5, VENUE_LNG + o * 1.5]];
+        }
+
+        if (r.type === 'blocked') {
+            L.polyline(coords, { color: '#ef4444', weight: 7, opacity: 0.95 })
+                .addTo(planLayerGroup)
+                .bindPopup(`<b>🚧 BLOCKED: ${r.roadName}</b><br>${r.reason}`);
+            const mid = coords[Math.floor(coords.length / 2)];
+            L.circleMarker(mid, { radius: 10, color: '#ef4444', fillColor: '#b91c1c', fillOpacity: 1, weight: 2 })
+                .addTo(planLayerGroup).bindPopup(`🚫 ${r.roadName}`);
+        } else {
+            L.polyline(coords, { color: '#22c55e', weight: 6, opacity: 0.95, dashArray: '12,6' })
+                .addTo(planLayerGroup)
+                .bindPopup(`<b>✅ OPEN: ${r.roadName}</b><br>→ ${r.designatedGate}<br>${r.instructions}`);
+        }
     });
-    (data.openRoads || []).forEach(r => {
-        L.polyline(getRoadCoords(r.roadName), { color: '#22c55e', weight: 5, opacity: 0.9, dashArray: '8,4' })
-            .addTo(planLayerGroup).bindPopup(`<b>✅ OPEN: ${r.roadName}</b><br>→ ${r.designatedGate}<br>${r.instructions}`);
-    });
+
+    // 👮 Staff positions
     (data.staffPositions || []).forEach((r, i) => {
+        const lat = r.lat || (VENUE_LAT - 0.002 + i * 0.001);
+        const lng = r.lng || (VENUE_LNG - 0.002 + i * 0.001);
         const icon = L.divIcon({
             html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)">👮</div>`,
             iconSize: [30, 30], iconAnchor: [15, 15]
         });
-        const off = i * 0.0008;
-        L.marker([VENUE_LAT - 0.002 + off, VENUE_LNG - 0.002 + off], { icon })
-            .addTo(planLayerGroup).bindPopup(`<b>${r.location}</b><br>${r.role} — ${r.count} staff`);
+        L.marker([lat, lng], { icon })
+            .addTo(planLayerGroup)
+            .bindPopup(`<b>${r.location}</b><br>${r.role} — ${r.count} staff`);
     });
-    try { venueMap.fitBounds(planLayerGroup.getBounds().pad(0.2)); } catch(e) {}
+
+    try { venueMap.fitBounds(planLayerGroup.getBounds().pad(0.15)); } catch(e) {}
 }
 
 
@@ -111,7 +156,7 @@ document.getElementById('btn-gen-plan').addEventListener('click', async () => {
             <b>🛣️ Open Roads:</b><br>${open || 'None'}<br><br>
             <b>👮 Staff Positions:</b><br>${staff || 'None'}
         `.trim();
-        renderPlanOnMap(data);
+        await renderPlanOnMap(data);
     } catch(err) {
         console.error("API failed, falling back to mock UI:", err);
         btn.innerHTML = `<span style="color:#ef4444;">API Err</span> - Faking...`;
