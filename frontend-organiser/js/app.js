@@ -49,37 +49,43 @@ function initMap() {
 // Uses `around:1500` so it only fetches the segment physically near the stadium
 async function fetchRoadGeometry(roadName) {
     const safeName = roadName.replace(/['"\\]/g, '').trim();
-    // Query only within 1.5km of the stadium to guarantee correct local segment
     const query = `[out:json][timeout:12];
 way["name"~"${safeName}",i](around:1500,${VENUE_LAT},${VENUE_LNG});
 out geom;`;
     try {
-        const res = await fetch('https://overpass-api.de/api/interpreter', {
-            method: 'POST',
-            body: query
-        });
+        const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query });
         if (!res.ok) return null;
         const json = await res.json();
-        if (json.elements && json.elements.length > 0) {
-            // Pick the way element whose centroid is closest to stadium
-            let best = null, bestDist = Infinity;
-            for (const el of json.elements) {
-                if (!el.geometry || el.geometry.length < 2) continue;
-                const midPt = el.geometry[Math.floor(el.geometry.length / 2)];
-                const d = Math.hypot(midPt.lat - VENUE_LAT, midPt.lon - VENUE_LNG);
-                if (d < bestDist) { bestDist = d; best = el; }
-            }
-            if (best) {
-                const pts = best.geometry.map(pt => [pt.lat, pt.lon]);
-                console.log(`OSM ✅ "${roadName}" → ${pts.length} nodes, dist=${bestDist.toFixed(4)}`);
-                return pts;
-            }
+        if (!json.elements || json.elements.length === 0) {
+            console.warn(`OSM ⚠️ No match: "${roadName}"`);
+            return null;
         }
-        console.warn(`OSM ⚠️ No ways found near stadium for "${roadName}"`);
+
+        // Pick the way whose midpoint is closest to the stadium
+        let best = null, bestDist = Infinity;
+        for (const el of json.elements) {
+            if (!el.geometry || el.geometry.length < 2) continue;
+            const mid = el.geometry[Math.floor(el.geometry.length / 2)];
+            const d = Math.hypot(mid.lat - VENUE_LAT, mid.lon - VENUE_LNG);
+            if (d < bestDist) { bestDist = d; best = el; }
+        }
+        if (!best) return null;
+
+        // CLIP: only keep nodes within 1.0km of the stadium (prevents lines extending too far)
+        const CLIP_DEG = 0.009; // ~1km in degrees
+        let pts = best.geometry
+            .filter(pt => Math.hypot(pt.lat - VENUE_LAT, pt.lon - VENUE_LNG) < CLIP_DEG)
+            .map(pt => [pt.lat, pt.lon]);
+
+        // If clipping removed everything, fallback to full geometry
+        if (pts.length < 2) pts = best.geometry.map(pt => [pt.lat, pt.lon]);
+
+        console.log(`OSM ✅ "${roadName}" → ${pts.length} nodes (clipped), dist=${bestDist.toFixed(4)}`);
+        return pts;
     } catch (e) {
         console.warn(`Overpass FAILED for "${roadName}":`, e);
+        return null;
     }
-    return null;
 }
 
 async function renderPlanOnMap(data) {
