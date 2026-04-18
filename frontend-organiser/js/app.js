@@ -92,56 +92,57 @@ function initMap() {
     preloadRoadsFromOSM(); // Single background fetch of all nearby roads
 }
 
-// Major roads to show in green when not blocked (whitelist near stadium)
-const MAJOR_ROADS_NEAR_STADIUM = [
-    'wallajah road', 'bells road', 'triplicane high road',
-    'victoria hostel road', 'kamarajar salai', 'bharathi salai',
-    'babu jagjivan ram salai', 'quaid e milleth salai', 'mts road',
-    'anna salai', 'rajaji salai'
+// Perimeter polygon: actual road intersection coordinates around the stadium
+// These corners are snapped to real road junctions forming a closed security zone
+const PERIMETER_POLYGON = [
+    [13.0662, 80.2748], // NW: Wallajah Rd × Triplicane High Rd junction
+    [13.0662, 80.2800], // N: Wallajah Rd × Babu Jagjivan Ram Salai
+    [13.0658, 80.2828], // NE: Wallajah Rd × Kamarajar Salai (Wallajah Bridge)
+    [13.0608, 80.2832], // E: Kamarajar Salai mid-section
+    [13.0578, 80.2820], // SE: Kamarajar Salai × Victoria Hostel Rd
+    [13.0572, 80.2758], // S: Bharathi Salai × OVM Street Rd
+    [13.0602, 80.2745], // SW: OVM Street × Bells Road junction
+    [13.0635, 80.2745], // W: Triplicane High Rd near stadium west entrance
+    [13.0662, 80.2748], // close polygon back to NW
 ];
 
-// Convert compass bearing (degrees, 0=North clockwise) to lat/lng on a circle
-// radius in metres around the stadium centre
-function bearingToLatLng(bearingDeg, radiusM) {
-    const R_LAT = 111000;           // metres per degree latitude
-    const R_LNG = 111000 * Math.cos(VENUE_LAT * Math.PI / 180);
-    const rad = (bearingDeg - 90) * Math.PI / 180; // convert to standard Math angle
-    const lat = VENUE_LAT + (radiusM / R_LAT) * Math.sin((90 - bearingDeg) * Math.PI / 180);
-    const lng = VENUE_LNG + (radiusM / R_LNG) * Math.sin(bearingDeg * Math.PI / 180);
-    return [lat, lng];
-}
+// Gate entry points at each corner of the perimeter polygon (except closing point)
+const PERIMETER_GATES = [
+    { name: 'Gate 1 – NW (Wallajah × Triplicane)', idx: 0 },
+    { name: 'Gate 2 – North (Wallajah × BCR Salai)',idx: 1 },
+    { name: 'Gate 3 – NE (Wallajah Bridge)',         idx: 2 },
+    { name: 'Gate 4 – East (Kamarajar Salai)',       idx: 3 },
+    { name: 'Gate 5 – SE (Victoria Hostel Rd)',      idx: 4 },
+    { name: 'Gate 6 – South (Bharathi Salai)',       idx: 5 },
+    { name: 'Gate 7 – SW (OVM × Bells Rd)',         idx: 6 },
+];
 
-// Fallback: evenly space N gates if Gemini doesn't return gate data
-function defaultGates(count) {
-    return Array.from({ length: count }, (_, i) => ({
-        gateName: `Gate ${i + 1}`,
-        bearingDegrees: Math.round((360 / count) * i)
-    }));
-}
-
-function drawPerimeter(gates) {
-    // Dashed blue circle at 300m
-    L.circle([VENUE_LAT, VENUE_LNG], {
-        radius: 300,
+function drawPerimeter(geminiGates) {
+    // Road-following closed polygon perimeter
+    L.polygon(PERIMETER_POLYGON, {
         color: '#3b82f6', weight: 3,
-        dashArray: '10,8', fillColor: '#3b82f6', fillOpacity: 0.05
-    }).addTo(planLayerGroup).bindPopup('<b>🔵 Security Perimeter</b><br>300m controlled access zone');
+        dashArray: '12,7', fillColor: '#3b82f6', fillOpacity: 0.05
+    }).addTo(planLayerGroup)
+      .bindPopup('<b>🔵 Security Perimeter</b><br>Controlled access zone — road-following boundary');
 
-    // Place gate icons at exact bearing positions on the perimeter
-    gates.forEach(g => {
-        const bearing = typeof g.bearingDegrees === 'number' ? g.bearingDegrees : 0;
-        const [lat, lng] = bearingToLatLng(bearing, 300);
+    // Gate icons placed AT the polygon corners / road junctions
+    PERIMETER_GATES.forEach((g, i) => {
+        const [lat, lng] = PERIMETER_POLYGON[g.idx];
+        // Try to match this gate to Gemini gate info if provided
+        const geminiGate = geminiGates && geminiGates[i];
+        const label = geminiGate?.gateId || `G${i + 1}`;
+        const assignedRoad = geminiGate?.assignedRoad || 'Entry point';
         const icon = L.divIcon({
-            html: `<div title="${g.gateName}" style="background:#1d4ed8;color:white;border-radius:5px;
+            html: `<div style="background:#1d4ed8;color:white;border-radius:5px;
                    width:34px;height:34px;display:flex;flex-direction:column;align-items:center;
-                   justify-content:center;font-size:11px;font-weight:700;
-                   border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.6);line-height:1.1">
-                   🚪<span style="font-size:9px">${g.gateId || ''}</span></div>`,
+                   justify-content:center;font-weight:700;border:2px solid white;
+                   box-shadow:0 2px 8px rgba(0,0,0,0.6);line-height:1.2">
+                   🚪<span style="font-size:9px">${label}</span></div>`,
             iconSize: [34, 34], iconAnchor: [17, 17]
         });
         L.marker([lat, lng], { icon })
             .addTo(planLayerGroup)
-            .bindPopup(`<b>${g.gateName}</b><br>Bearing: ${bearing}°<br>Assigned road: ${g.assignedRoad || 'TBD'}`);
+            .bindPopup(`<b>${g.name}</b><br>${assignedRoad}`);
     });
 }
 
@@ -149,9 +150,8 @@ function renderPlanOnMap(data) {
     if (!venueMap) return;
     planLayerGroup.clearLayers();
 
-    // ── Step 1: Draw 300m security perimeter + Gemini-defined gates ──────────
-    const gates = (data.gates && data.gates.length > 0) ? data.gates : defaultGates(7);
-    drawPerimeter(gates);
+    // ── Step 1: Road-following security perimeter + gate icons ────────────────
+    drawPerimeter(data.gates || []);
 
     // ── Step 2: Mark BLOCKED roads in RED ────────────────────────────────────
     const blockedKeys = new Set();
@@ -166,8 +166,7 @@ function renderPlanOnMap(data) {
         }
         if (!coords || coords.length < 2) coords = r.coords?.length >= 2 ? r.coords : null;
         if (!coords) return;
-
-        blockedKeys.add(normName(r.roadName));
+        blockedKeys.add(needle);
         L.polyline(coords, { color: '#ef4444', weight: 7, opacity: 0.95 })
             .addTo(planLayerGroup)
             .bindPopup(`<b>🚧 BLOCKED: ${r.roadName}</b><br>${r.reason}`);
@@ -176,14 +175,21 @@ function renderPlanOnMap(data) {
             .addTo(planLayerGroup).bindPopup(`🚫 ${r.roadName}`);
     });
 
-    // ── Step 3: ALL other major cached roads → GREEN ──────────────────────────
-    MAJOR_ROADS_NEAR_STADIUM.forEach(roadKey => {
-        if (blockedKeys.has(roadKey)) return; // skip if blocked
-        const coords = osmRoadCache[roadKey];
+    // ── Step 3: ALL cached OSM roads not blocked → GREEN ─────────────────────
+    // Use osmRoadCache directly so we never miss a road due to whitelist mismatch
+    Object.entries(osmRoadCache).forEach(([key, coords]) => {
+        if (blockedKeys.has(key)) return;
         if (!coords || coords.length < 2) return;
+        // Skip very short segments (tiny lanes < ~100m)
+        const len = Math.hypot(
+            coords[0][0] - coords[coords.length-1][0],
+            coords[0][1] - coords[coords.length-1][1]
+        );
+        if (len < 0.0005) return; // skip very tiny unnamed lanes
+        const label = key.replace(/\b\w/g, c => c.toUpperCase());
         L.polyline(coords, { color: '#22c55e', weight: 5, opacity: 0.85, dashArray: '10,5' })
             .addTo(planLayerGroup)
-            .bindPopup(`<b>✅ OPEN: ${roadKey.replace(/\b\w/g, c => c.toUpperCase())}</b><br>Pedestrian access permitted`);
+            .bindPopup(`<b>✅ OPEN: ${label}</b><br>Pedestrian access permitted`);
     });
 
     // ── Step 4: Staff positions ───────────────────────────────────────────────
@@ -191,7 +197,7 @@ function renderPlanOnMap(data) {
         const lat = r.lat || (VENUE_LAT - 0.002 + i * 0.001);
         const lng = r.lng || (VENUE_LNG - 0.002 + i * 0.001);
         const icon = L.divIcon({
-            html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:30px;height:30px;
+            html: `<div style="background:#7c3aed;color:white;border-radius:50%;width:30px;height:30px;
                    display:flex;align-items:center;justify-content:center;font-size:15px;
                    border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)">👮</div>`,
             iconSize: [30, 30], iconAnchor: [15, 15]
@@ -201,7 +207,7 @@ function renderPlanOnMap(data) {
             .bindPopup(`<b>${r.location}</b><br>${r.role} — ${r.count} staff`);
     });
 
-    try { venueMap.fitBounds(planLayerGroup.getBounds().pad(0.1), { maxZoom: 16, minZoom: 15 }); } catch(e) {}
+    try { venueMap.fitBounds(L.polygon(PERIMETER_POLYGON).getBounds().pad(0.15), { maxZoom: 16, minZoom: 15 }); } catch(e) {}
 }
 
 
