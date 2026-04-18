@@ -23,15 +23,19 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
     )
     user_prompt = (
         f"You are planning crowd management for {event_data.get('eventName')} at "
-        f"{event_data.get('venueName')}, {event_data.get('venueCity')}. "
-        f"The venue is MA Chidambaram Stadium, Chepauk at lat 13.0627, lng 80.2791. "
+        f"MA Chidambaram Stadium, Chepauk, Chennai (lat 13.0627, lng 80.2791). "
         f"Expected attendance: {event_data.get('totalCapacity')}. "
         f"Event start: {event_data.get('eventStartTime')}. "
-        "CRITICAL: Only mention roads that are DIRECTLY adjacent to MA Chidambaram Stadium "
-        "and within 500 metres of its gates. These include: Wallajah Road, Bells Road, "
-        "Triplicane High Road, Victoria Hostel Road, Quaid-e-Milleth Salai. "
-        "Do NOT mention roads more than 500m away from the stadium. "
-        "Generate a crowd routing plan. Return JSON with this exact schema: "
+        "The stadium has 4 gates: North Gate (Wallajah Road side), South Gate (Bharathi Salai side), "
+        "East Gate (Kamarajar Salai side), West Gate (Triplicane High Road side). "
+        "CRITICAL RULES: "
+        "1. Only mention roads DIRECTLY adjacent to the stadium and within 500m. "
+        "2. Return AT LEAST 3 blocked roads and AT LEAST 3 open roads with one per gate. "
+        "3. Assign each open road to a specific gate to distribute the crowd evenly. "
+        "4. Staff positions must be AT the stadium gates or road junctions, not far away. "
+        "Known nearby roads: Wallajah Road, Bells Road, Triplicane High Road, "
+        "Victoria Hostel Road, Kamarajar Salai, Bharathi Salai, Babu Jagjivan Ram Salai. "
+        "Generate a comprehensive crowd routing plan. Return JSON with this exact schema: "
         '{ "blockedRoads": [{"roadName": string, "reason": string, '
         '"coords": [[lat, lng], [lat, lng]]}], '
         '"openRoads": [{"roadName": string, "designatedGate": string, "instructions": string, '
