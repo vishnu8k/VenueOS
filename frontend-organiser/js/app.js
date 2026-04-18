@@ -47,13 +47,19 @@ out geom;`;
         const res = await fetch('https://overpass-api.de/api/interpreter', { method:'POST', body:query });
         if (!res.ok) return;
         const json = await res.json();
+        const CLIP_DEG = 0.007; // ~700m — only keep road nodes within this of the stadium
         for (const el of (json.elements||[])) {
             if (!el.tags?.name || !el.geometry || el.geometry.length < 2) continue;
             const key = normName(el.tags.name);
-            const mid = el.geometry[Math.floor(el.geometry.length/2)];
+            // Clip to nodes within 700m of stadium
+            let clipped = el.geometry.filter(p =>
+                Math.hypot(p.lat - VENUE_LAT, p.lon - VENUE_LNG) < CLIP_DEG
+            );
+            if (clipped.length < 2) clipped = el.geometry; // fallback: keep full way
+            const mid = clipped[Math.floor(clipped.length/2)];
             const d = Math.hypot(mid.lat - VENUE_LAT, mid.lon - VENUE_LNG);
             if (!osmRoadCache[key] || d < osmRoadCache[key]._dist) {
-                const pts = el.geometry.map(p => [p.lat, p.lon]);
+                const pts = clipped.map(p => [p.lat, p.lon]);
                 pts._dist = d;
                 osmRoadCache[key] = pts;
             }
