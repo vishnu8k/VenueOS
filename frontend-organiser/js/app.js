@@ -34,6 +34,46 @@ let venueMap = null;
 let planLayerGroup = null;
 const VENUE_LAT = 13.0627, VENUE_LNG = 80.2791;
 
+// ── Road cache: ONE bulk Overpass query at map init, keyed by normalised name ──
+let osmRoadCache = {};
+let osmCacheReady = false;
+function normName(s) { return (s||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').trim(); }
+
+async function preloadRoadsFromOSM() {
+    const query = `[out:json][timeout:25];
+way["name"](around:1500,${VENUE_LAT},${VENUE_LNG});
+out geom;`;
+    try {
+        const res = await fetch('https://overpass-api.de/api/interpreter', { method:'POST', body:query });
+        if (!res.ok) return;
+        const json = await res.json();
+        for (const el of (json.elements||[])) {
+            if (!el.tags?.name || !el.geometry || el.geometry.length < 2) continue;
+            const key = normName(el.tags.name);
+            const mid = el.geometry[Math.floor(el.geometry.length/2)];
+            const d = Math.hypot(mid.lat - VENUE_LAT, mid.lon - VENUE_LNG);
+            if (!osmRoadCache[key] || d < osmRoadCache[key]._dist) {
+                const pts = el.geometry.map(p => [p.lat, p.lon]);
+                pts._dist = d;
+                osmRoadCache[key] = pts;
+            }
+        }
+        osmCacheReady = true;
+        console.log(`OSM ✅ Preloaded ${Object.keys(osmRoadCache).length} roads near stadium`);
+    } catch(e) { console.warn('OSM preload error:', e); }
+}
+
+function lookupRoad(roadName) {
+    const needle = normName(roadName);
+    if (osmRoadCache[needle]) return osmRoadCache[needle];
+    // Partial word match fallback
+    const words = needle.split(' ').filter(w => w.length > 3);
+    for (const [key, coords] of Object.entries(osmRoadCache)) {
+        if (words.some(w => key.includes(w))) return coords;
+    }
+    return null;
+}
+
 function initMap() {
     if (venueMap) return;
     venueMap = L.map('leaflet-map').setView([VENUE_LAT, VENUE_LNG], 16);
@@ -43,73 +83,25 @@ function initMap() {
     L.marker([VENUE_LAT, VENUE_LNG]).addTo(venueMap)
         .bindPopup('<b>🏟️ MA Chidambaram Stadium</b><br>CSK vs MI 2026').openPopup();
     planLayerGroup = L.layerGroup().addTo(venueMap);
+    preloadRoadsFromOSM(); // Single background fetch of all nearby roads
 }
 
-// Fetch actual road geometry from OpenStreetMap Overpass API
-// Uses `around:1500` so it only fetches the segment physically near the stadium
-async function fetchRoadGeometry(roadName) {
-    const safeName = roadName.replace(/['"\\]/g, '').trim();
-    const query = `[out:json][timeout:12];
-way["name"~"${safeName}",i](around:1500,${VENUE_LAT},${VENUE_LNG});
-out geom;`;
-    try {
-        const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query });
-        if (!res.ok) return null;
-        const json = await res.json();
-        if (!json.elements || json.elements.length === 0) {
-            console.warn(`OSM ⚠️ No match: "${roadName}"`);
-            return null;
-        }
-
-        // Pick the way whose midpoint is closest to the stadium
-        let best = null, bestDist = Infinity;
-        for (const el of json.elements) {
-            if (!el.geometry || el.geometry.length < 2) continue;
-            const mid = el.geometry[Math.floor(el.geometry.length / 2)];
-            const d = Math.hypot(mid.lat - VENUE_LAT, mid.lon - VENUE_LNG);
-            if (d < bestDist) { bestDist = d; best = el; }
-        }
-        if (!best) return null;
-
-        // CLIP: only keep nodes within 1.0km of the stadium (prevents lines extending too far)
-        const CLIP_DEG = 0.009; // ~1km in degrees
-        let pts = best.geometry
-            .filter(pt => Math.hypot(pt.lat - VENUE_LAT, pt.lon - VENUE_LNG) < CLIP_DEG)
-            .map(pt => [pt.lat, pt.lon]);
-
-        // If clipping removed everything, fallback to full geometry
-        if (pts.length < 2) pts = best.geometry.map(pt => [pt.lat, pt.lon]);
-
-        console.log(`OSM ✅ "${roadName}" → ${pts.length} nodes (clipped), dist=${bestDist.toFixed(4)}`);
-        return pts;
-    } catch (e) {
-        console.warn(`Overpass FAILED for "${roadName}":`, e);
-        return null;
-    }
-}
-
-async function renderPlanOnMap(data) {
+function renderPlanOnMap(data) {
     if (!venueMap) return;
     planLayerGroup.clearLayers();
 
     const allRoads = [
-        ...(data.blockedRoads || []).map(r => ({ ...r, type: 'blocked' })),
-        ...(data.openRoads || []).map(r => ({ ...r, type: 'open' })),
+        ...(data.blockedRoads||[]).map(r => ({ ...r, type:'blocked' })),
+        ...(data.openRoads||[]).map(r => ({ ...r, type:'open' })),
     ];
 
-    // Fetch all road geometries in parallel
-    const geometries = await Promise.all(allRoads.map(r => fetchRoadGeometry(r.roadName)));
-
+    // Instant local lookup — no extra API calls
     allRoads.forEach((r, i) => {
-        // Use OSM geometry if found, else fall back to Gemini coords, else fallback line
-        let coords = geometries[i];
-        if (!coords || coords.length < 2) {
-            coords = (r.coords && r.coords.length >= 2) ? r.coords : null;
-        }
+        let coords = lookupRoad(r.roadName);
+        if (!coords || coords.length < 2) coords = (r.coords?.length >= 2) ? r.coords : null;
         if (!coords) {
-            // Last resort: tiny offset from stadium
             const o = (i + 1) * 0.002;
-            coords = [[VENUE_LAT + o, VENUE_LNG + o], [VENUE_LAT + o * 1.5, VENUE_LNG + o * 1.5]];
+            coords = [[VENUE_LAT + o, VENUE_LNG + o], [VENUE_LAT + o*1.5, VENUE_LNG + o*1.5]];
         }
 
         if (r.type === 'blocked') {
