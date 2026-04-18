@@ -34,69 +34,152 @@ let venueMap = null;
 let planLayerGroup = null;
 const VENUE_LAT = 13.0627, VENUE_LNG = 80.2791;
 
-// ── Road cache: ONE bulk Overpass query at map init, keyed by normalised name ──
-let osmRoadCache = {};
+// ── Constants ──────────────────────────────────────────────────────────────────
+const CLIP_M      = 1500;  // show roads within 1.5 km
+const PERI_MIN_M  = 180;   // inner edge of perimeter band
+const PERI_MAX_M  = 380;   // outer edge of perimeter band
+const ANGLE_BINS  = 60;    // 6-degree bins for perimeter polygon
+
+// Metre ↔ degree helpers (Chennai latitude)
+const R_LAT = 111000;
+const R_LNG = 111000 * Math.cos(VENUE_LAT * Math.PI / 180);
+function distM(lat, lng) {
+    return Math.hypot((lat - VENUE_LAT) * R_LAT, (lng - VENUE_LNG) * R_LNG);
+}
+
+// ── OSM Road Cache ─────────────────────────────────────────────────────────────
+let osmRoadCache = {};       // key: normName → [[lat,lng],…]  (clipped to CLIP_M)
 let osmCacheReady = false;
+let perimeterGateMarkers = [];  // {marker, label} for zoom updates
+let staffMarkers = [];           // {marker} for zoom updates
+
 function normName(s) { return (s||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').trim(); }
 
 async function preloadRoadsFromOSM() {
     const query = `[out:json][timeout:25];
-way["name"](around:1500,${VENUE_LAT},${VENUE_LNG});
-out tags geom;`; // 'tags' required — 'out geom' alone does NOT include tag data
+way["name"](around:${CLIP_M},${VENUE_LAT},${VENUE_LNG});
+out tags geom;`;
     try {
         const res = await fetch('https://overpass-api.de/api/interpreter', { method:'POST', body:query });
-        if (!res.ok) return;
+        if (!res.ok) { console.warn('OSM fetch failed:', res.status); return; }
         const json = await res.json();
-        const CLIP_DEG = 0.007; // ~700m clip
+        const clipDeg = CLIP_M / R_LAT;
         for (const el of (json.elements||[])) {
-            if (!el.tags?.name || !el.geometry || el.geometry.length < 2) continue;
+            if (!el.tags?.name || !el.geometry?.length) continue;
             const key = normName(el.tags.name);
-            let clipped = el.geometry.filter(p =>
-                Math.hypot(p.lat - VENUE_LAT, p.lon - VENUE_LNG) < CLIP_DEG
+            // Clip to CLIP_M radius
+            const clipped = el.geometry.filter(p =>
+                Math.hypot((p.lat-VENUE_LAT)*R_LAT, (p.lon-VENUE_LNG)*R_LNG) < CLIP_M
             );
-            if (clipped.length < 2) clipped = el.geometry;
+            if (clipped.length < 2) continue;
             const mid = clipped[Math.floor(clipped.length/2)];
-            const d = Math.hypot(mid.lat - VENUE_LAT, mid.lon - VENUE_LNG);
-            if (!osmRoadCache[key] || d < osmRoadCache[key]._dist) {
+            const d = distM(mid.lat, mid.lon);
+            if (!osmRoadCache[key] || d < osmRoadCache[key]._d) {
                 const pts = clipped.map(p => [p.lat, p.lon]);
-                pts._dist = d;
+                pts._d = d;
                 osmRoadCache[key] = pts;
             }
         }
         osmCacheReady = true;
-        console.log(`OSM ✅ Preloaded ${Object.keys(osmRoadCache).length} roads:`, Object.keys(osmRoadCache));
+        console.log(`OSM ✅ Preloaded ${Object.keys(osmRoadCache).length} roads within ${CLIP_M}m:`,
+                    Object.keys(osmRoadCache).sort());
     } catch(e) { console.warn('OSM preload error:', e); }
 }
 
-// Build a road-following perimeter polygon from actual cached road endpoints.
-// Takes the endpoints of bounding roads, sorts them by angle around the stadium,
-// forming a closed polygon that follows the actual road network.
-const PERIMETER_ROAD_NAMES = [
-    'wallajah road', 'kamarajar salai', 'bharathi salai',
-    'victoria hostel road', 'babu jagjivan ram salai',
-    'bells road', 'triplicane high road', 'ovm street road'
-];
-
-function buildRoadPerimeter() {
-    const pts = [];
-    for (const [key, coords] of Object.entries(osmRoadCache)) {
-        // Only use roads that are likely boundary roads (partial name match)
-        const isBoundary = PERIMETER_ROAD_NAMES.some(r =>
-            r.split(' ').filter(w=>w.length>3).some(w => key.includes(w))
-        );
-        if (!isBoundary || !coords || coords.length < 2) continue;
-        // Take first and last node of each boundary road segment
-        pts.push(coords[0]);
-        pts.push(coords[coords.length - 1]);
+// ── Perimeter: angle-binned road nodes in 180-380m band ───────────────────────
+function buildPerimeterPolygon() {
+    // One representative road node per 6° angle bin, closest to 280m target
+    const bins = new Array(ANGLE_BINS).fill(null);
+    for (const coords of Object.values(osmRoadCache)) {
+        for (const [lat, lng] of coords) {
+            const d = distM(lat, lng);
+            if (d < PERI_MIN_M || d > PERI_MAX_M) continue;
+            const angle = Math.atan2(lat - VENUE_LAT, lng - VENUE_LNG); // -π … π
+            const idx = Math.floor((angle + Math.PI) / (2 * Math.PI) * ANGLE_BINS) % ANGLE_BINS;
+            if (!bins[idx] || Math.abs(d - 280) < Math.abs(distM(...bins[idx]) - 280)) {
+                bins[idx] = [lat, lng];
+            }
+        }
     }
-    if (pts.length < 4) return null;
-    // Sort by angle around stadium center → natural closed hull along roads
-    return pts.sort((a, b) =>
-        Math.atan2(a[0]-VENUE_LAT, a[1]-VENUE_LNG) -
-        Math.atan2(b[0]-VENUE_LAT, b[1]-VENUE_LNG)
-    );
+    // Fill empty bins by interpolating neighbours
+    const filled = [];
+    for (let i = 0; i < ANGLE_BINS; i++) {
+        if (bins[i]) { filled.push(bins[i]); continue; }
+        // find nearest non-null before and after
+        let prev = null, next = null;
+        for (let d = 1; d < ANGLE_BINS; d++) {
+            if (!prev && bins[(i-d+ANGLE_BINS)%ANGLE_BINS]) prev = bins[(i-d+ANGLE_BINS)%ANGLE_BINS];
+            if (!next && bins[(i+d)%ANGLE_BINS]) next = bins[(i+d)%ANGLE_BINS];
+            if (prev && next) break;
+        }
+        if (prev && next) filled.push([(prev[0]+next[0])/2, (prev[1]+next[1])/2]);
+        else if (prev) filled.push(prev);
+    }
+    return filled.length >= 6 ? filled : null;
 }
 
+// Place N gates at equidistant positions along the perimeter polygon
+function placeGatesOnPolygon(poly, count) {
+    if (!poly || poly.length < 3 || count < 1) return [];
+    const n = poly.length;
+    let totalLen = 0;
+    const cumLen = [0];
+    for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        totalLen += Math.hypot(poly[i][0]-poly[j][0], poly[i][1]-poly[j][1]);
+        cumLen.push(totalLen);
+    }
+    const gates = [];
+    for (let g = 0; g < count; g++) {
+        const target = (g / count) * totalLen;
+        let seg = 0;
+        while (seg < n - 1 && cumLen[seg+1] < target) seg++;
+        const segLen = cumLen[seg+1] - cumLen[seg];
+        const t = segLen > 0 ? (target - cumLen[seg]) / segLen : 0;
+        const j = (seg + 1) % n;
+        gates.push([poly[seg][0] + t*(poly[j][0]-poly[seg][0]),
+                    poly[seg][1] + t*(poly[j][1]-poly[seg][1])]);
+    }
+    return gates;
+}
+
+// ── Zoom-responsive icon sizing ────────────────────────────────────────────────
+function iconSize(zoom) {
+    if (zoom >= 17) return { s: 34, fs: 16, emoji: true };
+    if (zoom >= 16) return { s: 26, fs: 13, emoji: true };
+    if (zoom >= 15) return { s: 18, fs: 10, emoji: false };
+    if (zoom >= 14) return { s: 11, fs: 0,  emoji: false };
+    return { s: 7, fs: 0, emoji: false };
+}
+function gateIcon(label, zoom, color='#f59e0b') {
+    const { s, fs, emoji } = iconSize(zoom);
+    return L.divIcon({
+        html: `<div style="background:${color};border-radius:50%;width:${s}px;height:${s}px;
+               display:flex;align-items:center;justify-content:center;color:white;font-weight:700;
+               border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.45);font-size:${fs}px;
+               transition:all .2s">${emoji?'🚪':''}</div>`,
+        iconSize:[s,s], iconAnchor:[s/2,s/2], className:''
+    });
+}
+function staffIcon(zoom) {
+    const { s, fs, emoji } = iconSize(zoom);
+    return L.divIcon({
+        html: `<div style="background:#8b5cf6;border-radius:50%;width:${s}px;height:${s}px;
+               display:flex;align-items:center;justify-content:center;color:white;font-weight:700;
+               border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.45);font-size:${fs}px;
+               transition:all .2s">${emoji?'👮':''}</div>`,
+        iconSize:[s,s], iconAnchor:[s/2,s/2], className:''
+    });
+}
+function registerZoomHandler() {
+    venueMap.on('zoomend', () => {
+        const z = venueMap.getZoom();
+        perimeterGateMarkers.forEach(({marker, label}) => marker.setIcon(gateIcon(label, z)));
+        staffMarkers.forEach(({marker}) => marker.setIcon(staffIcon(z)));
+    });
+}
+
+// ── Map Init ───────────────────────────────────────────────────────────────────
 function initMap() {
     if (venueMap) return;
     venueMap = L.map('leaflet-map').setView([VENUE_LAT, VENUE_LNG], 16);
@@ -106,54 +189,43 @@ function initMap() {
     L.marker([VENUE_LAT, VENUE_LNG]).addTo(venueMap)
         .bindPopup('<b>🏟️ MA Chidambaram Stadium</b><br>CSK vs MI 2026').openPopup();
     planLayerGroup = L.layerGroup().addTo(venueMap);
+    registerZoomHandler();
     preloadRoadsFromOSM();
 }
 
-function drawPerimeter(geminiGates) {
-    const perimPts = buildRoadPerimeter();
-    if (!perimPts || perimPts.length < 3) {
-        // Fallback: simple circle if roads not yet loaded
-        L.circle([VENUE_LAT, VENUE_LNG], {
-            radius: 350, color: '#3b82f6', weight: 3,
-            dashArray: '12,7', fillColor: '#3b82f6', fillOpacity: 0.04
-        }).addTo(planLayerGroup)
-          .bindPopup('<b>🔵 Security Perimeter</b>');
-        return;
-    }
-    L.polygon(perimPts, {
-        color: '#3b82f6', weight: 3,
-        dashArray: '12,7', fillColor: '#3b82f6', fillOpacity: 0.05
-    }).addTo(planLayerGroup)
-      .bindPopup('<b>🔵 Security Perimeter</b><br>Boundary follows actual roads around the stadium');
-
-    // Place gate icons at each perimeter vertex (road endpoints = natural entry points)
-    perimPts.forEach((pt, i) => {
-        const geminiGate = geminiGates && geminiGates[i];
-        const label = geminiGate?.gateId || `G${i+1}`;
-        const name  = geminiGate?.gateName || `Gate ${i+1}`;
-        const road  = geminiGate?.assignedRoad || '';
-        const icon = L.divIcon({
-            html: `<div style="background:#1d4ed8;color:white;border-radius:5px;
-                   width:32px;height:32px;display:flex;flex-direction:column;align-items:center;
-                   justify-content:center;font-weight:700;border:2px solid white;
-                   box-shadow:0 2px 8px rgba(0,0,0,0.6);line-height:1.2">
-                   🚪<span style="font-size:8px">${label}</span></div>`,
-            iconSize: [32, 32], iconAnchor: [16, 16]
-        });
-        L.marker(pt, { icon })
-            .addTo(planLayerGroup)
-            .bindPopup(`<b>${name}</b>${road ? '<br>Road: '+road : ''}`);
-    });
-}
-
+// ── Main render ────────────────────────────────────────────────────────────────
 function renderPlanOnMap(data) {
     if (!venueMap) return;
     planLayerGroup.clearLayers();
+    perimeterGateMarkers = [];
+    staffMarkers = [];
+    const zoom = venueMap.getZoom();
 
-    // ── Step 1: Road-following security perimeter ─────────────────────────────
-    drawPerimeter(data.gates || []);
+    // ── 1. Perimeter polygon ──────────────────────────────────────────────────
+    const poly = buildPerimeterPolygon();
+    if (poly) {
+        L.polygon(poly, {
+            color: '#3b82f6', weight: 2.5, dashArray: '10,6',
+            fillColor: '#3b82f6', fillOpacity: 0.04
+        }).addTo(planLayerGroup)
+          .bindPopup('<b>🔵 Security Perimeter</b><br>Follows roads within 180–380 m of stadium');
 
-    // ── Step 2: BLOCKED roads → RED ──────────────────────────────────────────
+        // ── 2. Gate icons: count = Gemini gate count (fallback 7) ─────────────
+        const gateCount = data.gates?.length || 7;
+        const gatePositions = placeGatesOnPolygon(poly, gateCount);
+        gatePositions.forEach((pos, i) => {
+            const g = data.gates?.[i] || {};
+            const label = g.gateId || `G${i+1}`;
+            const name  = g.gateName || `Gate ${i+1}`;
+            const road  = g.assignedRoad || '';
+            const m = L.marker(pos, { icon: gateIcon(label, zoom) })
+                .addTo(planLayerGroup)
+                .bindPopup(`<b>🚪 ${name}</b>${road?'<br>Road: '+road:''}`);
+            perimeterGateMarkers.push({ marker: m, label });
+        });
+    }
+
+    // ── 3. Blocked roads → RED ────────────────────────────────────────────────
     const blockedKeys = new Set();
     (data.blockedRoads || []).forEach(r => {
         const needle = normName(r.roadName);
@@ -167,45 +239,44 @@ function renderPlanOnMap(data) {
         if (!coords?.length) coords = r.coords?.length >= 2 ? r.coords : null;
         if (!coords) return;
         blockedKeys.add(needle);
-        L.polyline(coords, { color: '#ef4444', weight: 7, opacity: 0.95 })
+        L.polyline(coords, { color:'#ef4444', weight:7, opacity:0.9 })
             .addTo(planLayerGroup)
             .bindPopup(`<b>🚧 BLOCKED: ${r.roadName}</b><br>${r.reason}`);
-        const mid = coords[Math.floor(coords.length / 2)];
-        L.circleMarker(mid, { radius: 10, color: '#ef4444', fillColor: '#b91c1c', fillOpacity: 1, weight: 2 })
+        const mid = coords[Math.floor(coords.length/2)];
+        L.circleMarker(mid, { radius:9, color:'#ef4444', fillColor:'#b91c1c', fillOpacity:1, weight:2 })
             .addTo(planLayerGroup).bindPopup(`🚫 ${r.roadName}`);
     });
 
-    // ── Step 3: ALL other cached roads → GREEN  ───────────────────────────────
+    // ── 4. All other cached roads → GREEN (named roads ≥ 100 m long) ─────────
     Object.entries(osmRoadCache).forEach(([key, coords]) => {
         if (blockedKeys.has(key)) return;
         if (!coords || coords.length < 2) return;
-        // Filter very tiny segments (< ~50m in degree terms)
-        const spanLat = Math.abs(coords[0][0] - coords[coords.length-1][0]);
-        const spanLng = Math.abs(coords[0][1] - coords[coords.length-1][1]);
-        if (spanLat < 0.0003 && spanLng < 0.0003) return;
+        // Only named roads with meaningful length (~100 m in degrees)
+        const span = Math.hypot(
+            (coords[0][0]-coords[coords.length-1][0]) * R_LAT,
+            (coords[0][1]-coords[coords.length-1][1]) * R_LNG
+        );
+        if (span < 100) return;
         const label = key.replace(/\b\w/g, c => c.toUpperCase());
-        L.polyline(coords, { color: '#22c55e', weight: 5, opacity: 0.85, dashArray: '10,5' })
+        L.polyline(coords, { color:'#22c55e', weight:4.5, opacity:0.8, dashArray:'10,5' })
             .addTo(planLayerGroup)
-            .bindPopup(`<b>✅ OPEN: ${label}</b><br>Pedestrian access permitted`);
+            .bindPopup(`<b>✅ OPEN: ${label}</b><br>Pedestrian & vehicle access`);
     });
 
-    // ── Step 4: Staff positions → PURPLE ─────────────────────────────────────
+    // ── 5. Staff positions → PURPLE ───────────────────────────────────────────
     (data.staffPositions || []).forEach((r, i) => {
         const lat = r.lat || (VENUE_LAT - 0.002 + i * 0.001);
         const lng = r.lng || (VENUE_LNG - 0.002 + i * 0.001);
-        const icon = L.divIcon({
-            html: `<div style="background:#7c3aed;color:white;border-radius:50%;width:30px;height:30px;
-                   display:flex;align-items:center;justify-content:center;font-size:15px;
-                   border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)">👮</div>`,
-            iconSize: [30, 30], iconAnchor: [15, 15]
-        });
-        L.marker([lat, lng], { icon })
+        const m = L.marker([lat, lng], { icon: staffIcon(zoom) })
             .addTo(planLayerGroup)
-            .bindPopup(`<b>${r.location}</b><br>${r.role} — ${r.count} staff`);
+            .bindPopup(`<b>👮 ${r.location}</b><br>${r.role} — ${r.count} staff`);
+        staffMarkers.push({ marker: m });
     });
 
+    // Fit to perimeter bounds
     try {
-        venueMap.fitBounds(planLayerGroup.getBounds().pad(0.12), { maxZoom: 16, minZoom: 14 });
+        const target = poly ? L.polygon(poly) : planLayerGroup;
+        venueMap.fitBounds(target.getBounds().pad(0.1), { maxZoom: 16, minZoom: 14 });
     } catch(e) {}
 }
 
