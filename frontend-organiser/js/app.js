@@ -92,59 +92,108 @@ function initMap() {
     preloadRoadsFromOSM(); // Single background fetch of all nearby roads
 }
 
+// Major roads to show in green when not blocked (whitelist near stadium)
+const MAJOR_ROADS_NEAR_STADIUM = [
+    'wallajah road', 'bells road', 'triplicane high road',
+    'victoria hostel road', 'kamarajar salai', 'bharathi salai',
+    'babu jagjivan ram salai', 'quaid e milleth salai', 'mts road',
+    'anna salai', 'rajaji salai'
+];
+
+// Convert compass bearing (degrees, 0=North clockwise) to lat/lng on a circle
+// radius in metres around the stadium centre
+function bearingToLatLng(bearingDeg, radiusM) {
+    const R_LAT = 111000;           // metres per degree latitude
+    const R_LNG = 111000 * Math.cos(VENUE_LAT * Math.PI / 180);
+    const rad = (bearingDeg - 90) * Math.PI / 180; // convert to standard Math angle
+    const lat = VENUE_LAT + (radiusM / R_LAT) * Math.sin((90 - bearingDeg) * Math.PI / 180);
+    const lng = VENUE_LNG + (radiusM / R_LNG) * Math.sin(bearingDeg * Math.PI / 180);
+    return [lat, lng];
+}
+
+// Fallback: evenly space N gates if Gemini doesn't return gate data
+function defaultGates(count) {
+    return Array.from({ length: count }, (_, i) => ({
+        gateName: `Gate ${i + 1}`,
+        bearingDegrees: Math.round((360 / count) * i)
+    }));
+}
+
+function drawPerimeter(gates) {
+    // Dashed blue circle at 300m
+    L.circle([VENUE_LAT, VENUE_LNG], {
+        radius: 300,
+        color: '#3b82f6', weight: 3,
+        dashArray: '10,8', fillColor: '#3b82f6', fillOpacity: 0.05
+    }).addTo(planLayerGroup).bindPopup('<b>🔵 Security Perimeter</b><br>300m controlled access zone');
+
+    // Place gate icons at exact bearing positions on the perimeter
+    gates.forEach(g => {
+        const bearing = typeof g.bearingDegrees === 'number' ? g.bearingDegrees : 0;
+        const [lat, lng] = bearingToLatLng(bearing, 300);
+        const icon = L.divIcon({
+            html: `<div title="${g.gateName}" style="background:#1d4ed8;color:white;border-radius:5px;
+                   width:34px;height:34px;display:flex;flex-direction:column;align-items:center;
+                   justify-content:center;font-size:11px;font-weight:700;
+                   border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.6);line-height:1.1">
+                   🚪<span style="font-size:9px">${g.gateId || ''}</span></div>`,
+            iconSize: [34, 34], iconAnchor: [17, 17]
+        });
+        L.marker([lat, lng], { icon })
+            .addTo(planLayerGroup)
+            .bindPopup(`<b>${g.gateName}</b><br>Bearing: ${bearing}°<br>Assigned road: ${g.assignedRoad || 'TBD'}`);
+    });
+}
+
 function renderPlanOnMap(data) {
     if (!venueMap) return;
     planLayerGroup.clearLayers();
 
-    const allRoads = [
-        ...(data.blockedRoads||[]).map(r => ({ ...r, type:'blocked' })),
-        ...(data.openRoads||[]).map(r => ({ ...r, type:'open' })),
-    ];
+    // ── Step 1: Draw 300m security perimeter + Gemini-defined gates ──────────
+    const gates = (data.gates && data.gates.length > 0) ? data.gates : defaultGates(7);
+    drawPerimeter(gates);
 
-    // Instant local lookup — no extra API calls
-    const usedKeys = new Set(); // prevent same OSM road being both blocked AND open
-    allRoads.forEach((r, i) => {
+    // ── Step 2: Mark BLOCKED roads in RED ────────────────────────────────────
+    const blockedKeys = new Set();
+    (data.blockedRoads || []).forEach(r => {
         const needle = normName(r.roadName);
-        let coords = null;
-
-        // Try exact then partial, but skip if already assigned to another road
-        if (osmRoadCache[needle] && !usedKeys.has(needle)) {
-            coords = osmRoadCache[needle]; usedKeys.add(needle);
-        } else {
+        let coords = osmRoadCache[needle];
+        if (!coords) {
             const words = needle.split(' ').filter(w => w.length > 3);
-            for (const [key, c] of Object.entries(osmRoadCache)) {
-                if (!usedKeys.has(key) && words.some(w => key.includes(w))) {
-                    coords = c; usedKeys.add(key); break;
-                }
+            for (const [k, c] of Object.entries(osmRoadCache)) {
+                if (!blockedKeys.has(k) && words.some(w => k.includes(w))) { coords = c; break; }
             }
         }
+        if (!coords || coords.length < 2) coords = r.coords?.length >= 2 ? r.coords : null;
+        if (!coords) return;
 
-        if (!coords || coords.length < 2) coords = (r.coords?.length >= 2) ? r.coords : null;
-        if (!coords) {
-            const o = (i + 1) * 0.003;
-            coords = [[VENUE_LAT + o, VENUE_LNG - o], [VENUE_LAT + o*1.3, VENUE_LNG - o*0.5]];
-        }
-
-        if (r.type === 'blocked') {
-            L.polyline(coords, { color: '#ef4444', weight: 7, opacity: 0.95 })
-                .addTo(planLayerGroup)
-                .bindPopup(`<b>🚧 BLOCKED: ${r.roadName}</b><br>${r.reason}`);
-            const mid = coords[Math.floor(coords.length / 2)];
-            L.circleMarker(mid, { radius: 10, color: '#ef4444', fillColor: '#b91c1c', fillOpacity: 1, weight: 2 })
-                .addTo(planLayerGroup).bindPopup(`🚫 ${r.roadName}`);
-        } else {
-            L.polyline(coords, { color: '#22c55e', weight: 6, opacity: 0.95, dashArray: '12,6' })
-                .addTo(planLayerGroup)
-                .bindPopup(`<b>✅ OPEN: ${r.roadName}</b><br>→ ${r.designatedGate}<br>${r.instructions}`);
-        }
+        blockedKeys.add(normName(r.roadName));
+        L.polyline(coords, { color: '#ef4444', weight: 7, opacity: 0.95 })
+            .addTo(planLayerGroup)
+            .bindPopup(`<b>🚧 BLOCKED: ${r.roadName}</b><br>${r.reason}`);
+        const mid = coords[Math.floor(coords.length / 2)];
+        L.circleMarker(mid, { radius: 10, color: '#ef4444', fillColor: '#b91c1c', fillOpacity: 1, weight: 2 })
+            .addTo(planLayerGroup).bindPopup(`🚫 ${r.roadName}`);
     });
 
-    // 👮 Staff positions
+    // ── Step 3: ALL other major cached roads → GREEN ──────────────────────────
+    MAJOR_ROADS_NEAR_STADIUM.forEach(roadKey => {
+        if (blockedKeys.has(roadKey)) return; // skip if blocked
+        const coords = osmRoadCache[roadKey];
+        if (!coords || coords.length < 2) return;
+        L.polyline(coords, { color: '#22c55e', weight: 5, opacity: 0.85, dashArray: '10,5' })
+            .addTo(planLayerGroup)
+            .bindPopup(`<b>✅ OPEN: ${roadKey.replace(/\b\w/g, c => c.toUpperCase())}</b><br>Pedestrian access permitted`);
+    });
+
+    // ── Step 4: Staff positions ───────────────────────────────────────────────
     (data.staffPositions || []).forEach((r, i) => {
         const lat = r.lat || (VENUE_LAT - 0.002 + i * 0.001);
         const lng = r.lng || (VENUE_LNG - 0.002 + i * 0.001);
         const icon = L.divIcon({
-            html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)">👮</div>`,
+            html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:30px;height:30px;
+                   display:flex;align-items:center;justify-content:center;font-size:15px;
+                   border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)">👮</div>`,
             iconSize: [30, 30], iconAnchor: [15, 15]
         });
         L.marker([lat, lng], { icon })

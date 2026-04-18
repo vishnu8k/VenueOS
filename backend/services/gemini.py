@@ -26,22 +26,23 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
         f"MA Chidambaram Stadium, Chepauk, Chennai (lat 13.0627, lng 80.2791). "
         f"Expected attendance: {event_data.get('totalCapacity')}. "
         f"Event start: {event_data.get('eventStartTime')}. "
-        "The stadium has 4 gates: North Gate (Wallajah Road side), South Gate (Bharathi Salai side), "
-        "East Gate (Kamarajar Salai side), West Gate (Triplicane High Road side). "
+        "MA Chidambaram Stadium has 7 named gates arranged around the stadium perimeter. "
+        "The stadium has 4 main stands: Anna Stand (North), Suriyah Stand (South), "
+        "Leela Stand (East, near sea), Chidambaram Stand (West). "
         "CRITICAL RULES: "
         "1. Only mention roads DIRECTLY adjacent to the stadium and within 500m. "
-        "2. Return AT LEAST 3 blocked roads and AT LEAST 3 open roads with one per gate. "
-        "3. Assign each open road to a specific gate to distribute the crowd evenly. "
-        "4. Staff positions must be AT the stadium gates or road junctions, not far away. "
+        "2. Return AT LEAST 3 blocked roads and AT LEAST 3 open roads. "
+        "3. Distribute crowd across ALL gates — not just one side. "
+        "4. Staff positions must be at stadium gates or nearby junctions. "
         "Known nearby roads: Wallajah Road, Bells Road, Triplicane High Road, "
         "Victoria Hostel Road, Kamarajar Salai, Bharathi Salai, Babu Jagjivan Ram Salai. "
         "Generate a comprehensive crowd routing plan. Return JSON with this exact schema: "
-        '{ "blockedRoads": [{"roadName": string, "reason": string, '
-        '"coords": [[lat, lng], [lat, lng]]}], '
-        '"openRoads": [{"roadName": string, "designatedGate": string, "instructions": string, '
-        '"coords": [[lat, lng], [lat, lng]]}], '
-        '"staffPositions": [{"location": string, "role": string, "count": number, '
-        '"lat": number, "lng": number}], '
+        '{ "gates": [{"gateId": string, "gateName": string, '
+        '"bearingDegrees": number, "side": "north"|"south"|"east"|"west"|"northeast"|"northwest"|"southeast"|"southwest", '
+        '"assignedRoad": string}], '
+        '"blockedRoads": [{"roadName": string, "reason": string, "coords": [[lat, lng], [lat, lng]]}], '
+        '"openRoads": [{"roadName": string, "designatedGate": string, "instructions": string, "coords": [[lat, lng], [lat, lng]]}], '
+        '"staffPositions": [{"location": string, "role": string, "count": number, "lat": number, "lng": number}], '
         '"summary": string }'
     )
     try:
