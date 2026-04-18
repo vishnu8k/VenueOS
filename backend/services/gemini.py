@@ -24,13 +24,14 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
     user_prompt = (
         f"You are planning crowd management for {event_data.get('eventName')} at "
         f"{event_data.get('venueName')}, {event_data.get('venueCity')}. "
-        f"The venue is MA Chidambaram Stadium at lat 13.0627, lng 80.2791. "
+        f"The venue is MA Chidambaram Stadium, Chepauk at lat 13.0627, lng 80.2791. "
         f"Expected attendance: {event_data.get('totalCapacity')}. "
         f"Event start: {event_data.get('eventStartTime')}. "
-        "Generate a detailed road-blocking and crowd routing plan for real roads near this stadium. "
-        "IMPORTANT: For every road and staff position, return REAL geographic coordinates "
-        "(lat/lng) that fall ON the actual road near MA Chidambaram Stadium Chennai. "
-        "Return JSON with this exact schema: "
+        "CRITICAL: Only mention roads that are DIRECTLY adjacent to MA Chidambaram Stadium "
+        "and within 500 metres of its gates. These include: Wallajah Road, Bells Road, "
+        "Triplicane High Road, Victoria Hostel Road, Quaid-e-Milleth Salai. "
+        "Do NOT mention roads more than 500m away from the stadium. "
+        "Generate a crowd routing plan. Return JSON with this exact schema: "
         '{ "blockedRoads": [{"roadName": string, "reason": string, '
         '"coords": [[lat, lng], [lat, lng]]}], '
         '"openRoads": [{"roadName": string, "designatedGate": string, "instructions": string, '

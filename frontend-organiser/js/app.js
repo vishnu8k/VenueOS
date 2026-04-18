@@ -96,12 +96,27 @@ function renderPlanOnMap(data) {
     ];
 
     // Instant local lookup — no extra API calls
+    const usedKeys = new Set(); // prevent same OSM road being both blocked AND open
     allRoads.forEach((r, i) => {
-        let coords = lookupRoad(r.roadName);
+        const needle = normName(r.roadName);
+        let coords = null;
+
+        // Try exact then partial, but skip if already assigned to another road
+        if (osmRoadCache[needle] && !usedKeys.has(needle)) {
+            coords = osmRoadCache[needle]; usedKeys.add(needle);
+        } else {
+            const words = needle.split(' ').filter(w => w.length > 3);
+            for (const [key, c] of Object.entries(osmRoadCache)) {
+                if (!usedKeys.has(key) && words.some(w => key.includes(w))) {
+                    coords = c; usedKeys.add(key); break;
+                }
+            }
+        }
+
         if (!coords || coords.length < 2) coords = (r.coords?.length >= 2) ? r.coords : null;
         if (!coords) {
-            const o = (i + 1) * 0.002;
-            coords = [[VENUE_LAT + o, VENUE_LNG + o], [VENUE_LAT + o*1.5, VENUE_LNG + o*1.5]];
+            const o = (i + 1) * 0.003;
+            coords = [[VENUE_LAT + o, VENUE_LNG - o], [VENUE_LAT + o*1.3, VENUE_LNG - o*0.5]];
         }
 
         if (r.type === 'blocked') {
@@ -131,7 +146,7 @@ function renderPlanOnMap(data) {
             .bindPopup(`<b>${r.location}</b><br>${r.role} — ${r.count} staff`);
     });
 
-    try { venueMap.fitBounds(planLayerGroup.getBounds().pad(0.15)); } catch(e) {}
+    try { venueMap.fitBounds(planLayerGroup.getBounds().pad(0.1), { maxZoom: 16, minZoom: 15 }); } catch(e) {}
 }
 
 
