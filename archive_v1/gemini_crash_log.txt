@@ -1,0 +1,6 @@
+CRASH REPORT:
+Traceback (most recent call last):
+  File "E:\Prompt Wars\Project 1\backend\services\gemini.py", line 72, in generate_road_plan
+    raise Exception("All Gemini model endpoints returned 404 or failed. Legacy 1.0 models also rejected prompt.")
+Exception: All Gemini model endpoints returned 404 or failed. Legacy 1.0 models also rejected prompt.
+
