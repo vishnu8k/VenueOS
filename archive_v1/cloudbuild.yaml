@@ -1,8 +1,0 @@
-steps:
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-f', 'backend/Dockerfile', '-t', 'gcr.io/$PROJECT_ID/venueos-backend', '.']
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/$PROJECT_ID/venueos-backend']
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  args: ['gcloud', 'run', 'deploy', 'venueos-backend', '--image', 'gcr.io/$PROJECT_ID/venueos-backend', '--region', 'asia-south1', '--platform', 'managed']
-images: ['gcr.io/$PROJECT_ID/venueos-backend']
