@@ -1,9 +1,0 @@
-fastapi>=0.115.0,<1
-uvicorn[standard]>=0.30.0,<1
-firebase-admin>=6.5.0,<7
-google-generativeai>=0.8.3,<1
-# Keep pydantic explicit to ensure a Python 3.13-compatible wheel is selected locally.
-pydantic>=2.10.0,<3
-python-dotenv>=1.0.1,<2
-qrcode>=7.4.2,<8
-pyjwt>=2.8.0,<3
