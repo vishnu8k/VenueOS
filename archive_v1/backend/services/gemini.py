@@ -31,11 +31,11 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
         "Leela Stand (East, near sea), Chidambaram Stand (West). "
         "CRITICAL RULES: "
         "1. Only mention roads DIRECTLY adjacent to the stadium and within 500m. "
-        "2. Return AT LEAST 3 blocked roads and AT LEAST 3 open roads. "
-        "3. Distribute crowd across ALL gates — not just one side. "
-        "4. Staff positions must be at stadium gates or nearby junctions. "
-        "Known nearby roads: Wallajah Road, Bells Road, Triplicane High Road, "
-        "Victoria Hostel Road, Kamarajar Salai, Bharathi Salai, Babu Jagjivan Ram Salai. "
+        "2. Provide exactly 5 blocked roads (e.g. Wallajah Road, Bells Road, Victoria Hostel Road, Kamarajar Salai, Bharathi Salai) and at least 3 open roads. Do not return fewer than 5 blocked roads. "
+        "3. Blocked roads MUST be chosen strictly from the direct perimeter bounds hugging the stadium (e.g. Wallajah Road, Babu Jagjivan Ram Salai, Kamarajar Salai, Bharathi Salai, Victoria Hostel Road). Do not block roads further out in the city block. "
+        "4. Staff positions must be at stadium gates or exactly at the barricades of these blocked bounding roads. "
+        "Known nearby bounding roads: Wallajah Road, Babu Jagjivan Ram Salai, "
+        "Victoria Hostel Road, Kamarajar Salai, Bharathi Salai. "
         "Generate a comprehensive crowd routing plan. Return JSON with this exact schema: "
         '{ "gates": [{"gateId": string, "gateName": string, '
         '"bearingDegrees": number, "side": "north"|"south"|"east"|"west"|"northeast"|"northwest"|"southeast"|"southwest", '
@@ -50,7 +50,7 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
         text = ""
         for m_name in models_to_try:
             try:
-                # Legacy models (1.0) don't support structural system instructions, inject dynamically
+                # Older models like gemini-pro (1.0) lack structural support for system_instruction
                 kwargs = {}
                 active_prompt = user_prompt
                 if "1.5" in m_name:
@@ -62,13 +62,14 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
                 model = genai.GenerativeModel(model_name=m_name, **kwargs)
                 response = await model.generate_content_async(active_prompt)
                 text = response.text.strip()
+                print(f"SUCCESSFULLY loaded model: {m_name}")
                 break # Success
             except Exception as inner_e:
                 print(f"Model {m_name} failed: {inner_e}")
                 continue
                 
         if not text:
-            raise Exception("All Gemini model endpoints rejected the prompt or returned 404.")
+            raise Exception("All Gemini model endpoints returned 404 or failed. Legacy 1.0 models also rejected prompt.")
 
         if text.startswith("```json"): text = text[7:]
         elif text.startswith("```"): text = text[3:]
@@ -83,8 +84,27 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
             
         return json.loads(text)
     except Exception as e:
-        print(f"Gemini API error in generate_road_plan: {e}")
-        return {}
+        import traceback
+        err_msg = traceback.format_exc()
+        print(f"Gemini API error in generate_road_plan:\n{err_msg}")
+        try:
+            with open("gemini_crash_log.txt", "w") as logFile:
+                logFile.write(f"CRASH REPORT:\n{err_msg}\n")
+                if 'response' in locals():
+                    logFile.write(f"\nRAW RESPONSE TEXT:\n{response.text}\n")
+        except:
+            pass
+            
+        # Return fallback mock data so UI doesn't break into "None" mode if API gets rate-limited
+        return {
+            "summary": "Fallback Plan triggered due to JSON parse error from Gemini.",
+            "blockedRoads": [
+                {"roadName": "Wallajah Road", "reason": "Primary crowd surge zone.", "coords": []},
+                {"roadName": "Kamarajar Salai", "reason": "VIP transit corridor.", "coords": []}
+            ],
+            "openRoads": [],
+            "staffPositions": []
+        }
 
 async def generate_batch_schedule(event_data: Dict[str, Any], total_attendees: int, transport_capacity: int) -> Dict[str, Any]:
     system_instruction = (
