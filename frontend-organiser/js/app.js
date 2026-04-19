@@ -35,7 +35,7 @@ let planLayerGroup = null;
 const VENUE_LAT = 13.0627, VENUE_LNG = 80.2791;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const CLIP_M      = 1500;  // show roads within 1.5 km
+const CLIP_M      = 500;   // show roads within 500 m
 const PERI_MIN_M  = 180;   // inner edge of perimeter band
 const PERI_MAX_M  = 380;   // outer edge of perimeter band
 const ANGLE_BINS  = 60;    // 6-degree bins for perimeter polygon
@@ -230,15 +230,23 @@ function renderPlanOnMap(data) {
     (data.blockedRoads || []).forEach(r => {
         const needle = normName(r.roadName);
         let coords = osmRoadCache[needle];
+        let trueMatchedKey = needle;
+        
         if (!coords) {
             const words = needle.split(' ').filter(w => w.length > 3);
             for (const [k, c] of Object.entries(osmRoadCache)) {
-                if (!blockedKeys.has(k) && words.some(w => k.includes(w))) { coords = c; break; }
+                if (!blockedKeys.has(k) && words.some(w => k.includes(w))) {
+                    coords = c;
+                    trueMatchedKey = k;
+                    break;
+                }
             }
         }
         if (!coords?.length) coords = r.coords?.length >= 2 ? r.coords : null;
         if (!coords) return;
-        blockedKeys.add(needle);
+        
+        blockedKeys.add(trueMatchedKey);
+        
         L.polyline(coords, { color:'#ef4444', weight:7, opacity:0.9 })
             .addTo(planLayerGroup)
             .bindPopup(`<b>🚧 BLOCKED: ${r.roadName}</b><br>${r.reason}`);
