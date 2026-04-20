@@ -11,7 +11,7 @@ if api_key:
 # We use SystemInstruction to pass the system prompt context
 def get_model(system_instruction: str):
     return genai.GenerativeModel(
-        model_name="gemini-1.5-flash-latest",
+        model_name="gemini-2.5-flash",
         system_instruction=system_instruction,
         generation_config={"response_mime_type": "application/json"}
     )
@@ -46,21 +46,16 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
         '"summary": string }'
     )
     try:
-        models_to_try = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro-latest", "gemini-pro"]
+        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
         text = ""
         for m_name in models_to_try:
             try:
-                # Legacy models (1.0) don't support structural system instructions, inject dynamically
-                kwargs = {}
-                active_prompt = user_prompt
-                if "1.5" in m_name:
-                    kwargs["system_instruction"] = system_instruction
-                    kwargs["generation_config"] = {"response_mime_type": "application/json"}
-                else:
-                    active_prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\nUSER PROMPT: {user_prompt}"
-                    
-                model = genai.GenerativeModel(model_name=m_name, **kwargs)
-                response = await model.generate_content_async(active_prompt)
+                model = genai.GenerativeModel(
+                    model_name=m_name,
+                    system_instruction=system_instruction,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                response = await model.generate_content_async(user_prompt)
                 text = response.text.strip()
                 break # Success
             except Exception as inner_e:
