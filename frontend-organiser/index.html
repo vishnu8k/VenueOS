@@ -21,7 +21,7 @@
         <div id="view-login" class="view active center-content">
             <div class="glass-card login-box">
                 <div class="logo-container">
-                    <div class="logo-icon"></div>
+                    <div class="logo-icon" aria-hidden="true"></div>
                     <h1>VenueOS</h1>
                 </div>
                 <p>Intelligent Crowd Management</p>
@@ -48,7 +48,7 @@
             </div>
             <div class="events-grid" id="events-container">
                 <!-- Example Card -->
-                <div class="glass-card event-card" onclick="showView('view-setup')">
+                <div class="glass-card event-card" onclick="showView('view-setup')" role="button" tabindex="0" aria-label="Open Event: CSK vs MI">
                     <h3>CSK vs MI</h3>
                     <p>MA Chidambaram Stadium</p>
                     <span class="badge active-badge">Active</span>
@@ -59,17 +59,17 @@
         <!-- Screen O3 & O5: Dashboard with Map -->
         <div id="view-setup" class="view page-content grid-layout">
             <div class="sidebar glass-card">
-                <div class="tabs">
-                    <button class="tab-btn active" onclick="switchSetupTab('setup-plan')">Planning</button>
-                    <button class="tab-btn" onclick="switchSetupTab('setup-live')">Live Ops</button>
+                <div class="tabs" role="tablist" aria-label="Setup Modes">
+                    <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="setup-plan" onclick="switchSetupTab('setup-plan')">Planning</button>
+                    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="setup-live" onclick="switchSetupTab('setup-live')">Live Ops</button>
                 </div>
                 
                 <!-- Plan Tab -->
-                <div id="setup-plan" class="tab-content active">
+                <div id="setup-plan" class="tab-content active" role="tabpanel">
                     <h3>AI Planning</h3>
                     <div class="form-group">
-                        <label>Expected Crowd Size</label>
-                        <input type="number" id="input-crowd-size" value="50000">
+                        <label for="input-crowd-size">Expected Crowd Size</label>
+                        <input type="number" id="input-crowd-size" name="crowd-size" value="50000">
                     </div>
                     <button class="btn-primary w-100" id="btn-gen-plan">Generate Road Plan</button>
                     <button class="btn-secondary w-100 mt-10" id="btn-gen-batches">Generate Batches</button>
@@ -81,11 +81,11 @@
                 </div>
 
                 <!-- Live Ops Tab -->
-                <div id="setup-live" class="tab-content">
+                <div id="setup-live" class="tab-content" role="tabpanel">
                     <h3>Live Heatmap & Alerts</h3>
                     <div class="form-group">
-                        <label>Match State Update</label>
-                        <input type="text" id="input-match-state" placeholder="e.g. 14th over...">
+                        <label for="input-match-state">Match State Update</label>
+                        <input type="text" id="input-match-state" name="match-state" placeholder="e.g. 14th over...">
                     </div>
                     <div class="alerts-container mt-20">
                         <div class="alert-card critical">
@@ -97,8 +97,8 @@
                 </div>
             </div>
             <div class="main-panel glass-card p-0">
-                <div id="map-container">
-                    <div id="leaflet-map" style="width:100%; height:500px; border-radius:12px;"></div>
+                <div id="map-container" aria-label="Interactive VenueOS Crowd Management Map">
+                    <div id="leaflet-map" style="width:100%; height:500px; border-radius:12px;" aria-label="Leaflet OpenStreetMap Layer"></div>
                 </div>
             </div>
         </div>
@@ -141,7 +141,8 @@
             <div class="glass-card scanner-box">
                 <div class="header-row">
                     <h2>Staff Checkpoint</h2>
-                    <select id="checkpoint-select" class="dropdown">
+                    <label for="checkpoint-select" class="sr-only" aria-hidden="true" style="display:none;">Select Checkpoint</label>
+                    <select id="checkpoint-select" name="checkpoint-select" class="dropdown" aria-label="Select checkpoint location">
                         <option value="transport">Transport Boarding</option>
                         <option value="perimeter">Perimeter Cleared</option>
                         <option value="gate">Gate Entry</option>
