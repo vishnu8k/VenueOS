@@ -116,7 +116,27 @@ function buildPerimeterPolygon() {
         if (prev && next) filled.push([(prev[0] + next[0]) / 2, (prev[1] + next[1]) / 2]);
         else if (prev) filled.push(prev);
     }
-    return filled.length >= 6 ? filled : null;
+    
+    if (filled.length < 6) return null;
+    
+    // Apply a double-pass moving average filter to normalize and smooth the spiky zigzag geometry
+    let smoothed = [...filled];
+    for(let passes = 0; passes < 2; passes++) {
+        const temp = [];
+        const len = smoothed.length;
+        for (let i = 0; i < len; i++) {
+            const prev = smoothed[(i - 1 + len) % len];
+            const curr = smoothed[i];
+            const next = smoothed[(i + 1) % len];
+            temp.push([
+                prev[0]*0.25 + curr[0]*0.5 + next[0]*0.25,
+                prev[1]*0.25 + curr[1]*0.5 + next[1]*0.25
+            ]);
+        }
+        smoothed = temp;
+    }
+    
+    return smoothed;
 }
 
 // Place N gates at equidistant positions along the perimeter polygon
@@ -309,6 +329,11 @@ document.getElementById('btn-gen-plan').addEventListener('click', async () => {
         });
         if (!response.ok) throw new Error("API Error " + response.status);
         const data = await response.json();
+        
+        if (!data.summary && (!data.blockedRoads || data.blockedRoads.length === 0)) {
+            throw new Error("AI returned empty JSON payload");
+        }
+        
         btn.innerText = "Plan Generated";
         document.getElementById('plan-output').style.display = "block";
         const summary = data.summary || '';

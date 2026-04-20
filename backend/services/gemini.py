@@ -70,18 +70,13 @@ async def generate_road_plan(event_data: Dict[str, Any], gate_road_mapping: Dict
         if not text:
             raise Exception("All Gemini model endpoints rejected the prompt or returned 404.")
 
-        if text.startswith("```json"): text = text[7:]
-        elif text.startswith("```"): text = text[3:]
-        if text.endswith("```"): text = text[:-3]
-        text = text.strip()
-        
-        # Fallback regex if stripping fails
-        if not text.startswith("{"):
-            import re
-            match = re.search(r'\{.*\}', text, re.DOTALL)
-            if match: text = match.group(0)
+        import re
+        match = re.search(r'(\{.*\})', text, re.DOTALL)
+        if not match:
+            raise Exception("No JSON payload detected in AI response.")
             
-        return json.loads(text)
+        clean_text = match.group(1).strip()
+        return json.loads(clean_text)
     except Exception as e:
         print(f"Gemini API error in generate_road_plan: {e}")
         return {}
